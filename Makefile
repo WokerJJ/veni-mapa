@@ -14,6 +14,8 @@ BUILD_DATE ?=
 # URL absoluta donde se publican PMTiles, glyphs y sprites; queda escrita en los
 # estilos. Por defecto, la de `make serve`.
 STYLE_BASE_URL ?= http://localhost:8080
+# Versión que queda en los metadatos de los estilos; la fija el workflow de release.
+STYLE_VERSION ?= dev
 
 # Los valores de la región salen de config/region.yml. make regenera
 # build/region.mk cuando cambia el YAML y lo vuelve a leer antes de seguir.
@@ -28,7 +30,7 @@ $(BUILD_DIR)/region.mk: config/region.yml scripts/region.sh
 	@scripts/region.sh $< >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv $@.tmp $@
 
-export REGION_NAME REGION_BBOX REGION_MAXZOOM REGION_CENTER REGION_ZOOM BUILD_DIR BUILD_DATE STYLE_BASE_URL
+export REGION_NAME REGION_BBOX REGION_MAXZOOM REGION_CENTER REGION_ZOOM BUILD_DIR BUILD_DATE STYLE_BASE_URL STYLE_VERSION
 
 .PHONY: help all extract style assets serve check clean
 
@@ -47,11 +49,12 @@ extract: ## Extrae la región a build/<región>.pmtiles (reporte en build/extrac
 assets: ## Glyphs y sprites autohospedados en build/assets (verificados por SHA-256)
 	@scripts/assets.sh
 
-# Dependencias de Node instaladas según package-lock.json. node_modules es un
-# volumen de Docker (compose.yaml), por eso npm install y no npm ci: npm ci
-# intenta borrar la carpeta y falla sobre un punto de montaje.
+# Dependencias de Node exactamente como dice package-lock.json: npm ci falla si
+# el lock no coincide con package.json, en vez de reescribirlo como npm install.
+# node_modules es un volumen de Docker (compose.yaml); npm ci vacía su
+# contenido sin borrar el punto de montaje.
 node_modules/.package-lock.json: package.json package-lock.json
-	@npm install --no-audit --no-fund --loglevel=error
+	@npm ci --no-audit --no-fund --loglevel=error
 
 style: node_modules/.package-lock.json ## Estilos MapLibre claro/oscuro ES/EN en build/style (STYLE_BASE_URL=…)
 	@node scripts/style/build.ts
