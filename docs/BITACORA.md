@@ -107,3 +107,36 @@ Diario de avance por bloques (máximo 3 issues por bloque).
 - Verificación completa en local: pipeline, 212 pruebas de Node, 8 suites de shell, `make verify` y render (8/8). La release v0.1.0 pasa `sha256sum -c`.
 
 **Sigue:** #47 subir la imagen a una Alpine con parches de Node (alta), #46 el PR mensual de datos no dispara release, #11 README y guía de OSM, y publicar 0.1.1 (PR #38).
+
+## 2026-09-29 · Bloque 5: imagen con parches, release de datos y documentación
+
+**Issues cerrados:** #47 imagen sobre Alpine con parches de Node (PR #49), #46 el PR mensual de datos abre una release (PR #50), #11 README completo y guía de OpenStreetMap (PR #51). El milestone **v0.1.0 · Primer mapa** quedó sin issues abiertos.
+
+**Qué quedó**
+
+- La imagen de herramientas pasó a Alpine 3.24, con Node 24.21.0 y FreeType 2.14.3. Los glyphs salen idénticos (mismo `glyphs_sha256`).
+- `scripts/node-tag-age.sh` corre en la actualización mensual y avisa (`::warning::`, también en el resumen de la corrida) en tres casos: la etiqueta de Node de la imagen lleva más de 30 días congelada frente a `node:<mayor>-alpine`, la mayor de Node lleva más de 90 días sin push, o no se pudo comprobar. Con la imagen anterior habría avisado: 119 días.
+- El PR mensual se titula `deps(datos)`, un tipo visible, así que al fusionarlo release-please prepara una versión de parche. Una prueba lee `release-please-config.json` y exige que el tipo no esté oculto.
+- README:
+  - badges, capturas generadas por la prueba de render (`RENDER_CAPTURE_DIR`) y un diagrama del pipeline;
+  - requisitos;
+  - la sección *Usar el mapa en la app* (`VITE_MAP_STYLE_URL`). Su ejemplo vive en `docs/ejemplos/mapa-app.ts`, `make check` lo compila con resolución `bundler` y una prueba exige que el README muestre ese archivo.
+- `docs/CONTRIBUIR-OSM.md`:
+  - qué mapear en Roldanillo y cuándo usar `name:en`;
+  - los editores iD, StreetComplete y Every Door;
+  - las reglas de OSM;
+  - cuánto tarda un cambio en llegar al mapa.
+
+**Decisiones**
+
+- Se eligió Alpine 3.24 en vez de 3.23 porque es la vigente más nueva y recibe parches por más tiempo.
+- Se eligió `deps(datos)` en vez de `fix(datos)`: el extracto es un insumo externo que se actualiza, no un error, y el CHANGELOG lo muestra en *Dependencias*.
+- El aviso de la imagen no frena la actualización de datos (`continue-on-error`). Un fallo al comprobar también avisa, para que "sin aviso" nunca signifique "no se comprobó".
+
+**Aprendizajes**
+
+- La revisión encontró que el primer ejemplo para la app no compilaba: maplibre-gl 6 no tiene export por defecto. Además, repetía el fallo del mapa vacío al abrir. Un ejemplo en la documentación también necesita prueba.
+- `date -d` de GNU interpreta texto relativo después de una fecha (`… +400 days`), y bash lee `08` como octal. Los datos externos se validan con el formato exacto antes de convertirlos.
+- actionlint 1.7.12 trae metadatos viejos de `create-github-app-token@v3` y marca `client-id` como inválido. Es un falso positivo: v3 lo define y marca `app-id` como obsoleto.
+
+**Sigue:** publicar 0.1.1 fusionando el PR de release #38 (sus workflows pueden necesitar *Approve and run*). Después, v0.2.0 · Rutas (#29) o la app veni-roldanillo.
