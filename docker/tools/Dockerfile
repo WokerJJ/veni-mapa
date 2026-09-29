@@ -12,7 +12,7 @@ FROM protomaps/go-pmtiles:v1.31.2 AS pmtiles
 # varias fuentes en un solo fontstack. No publica binarios: se compila aquí,
 # sobre la misma versión de Alpine que la imagen final, para enlazar contra la
 # misma libc y la misma FreeType.
-FROM alpine:3.22 AS font-maker
+FROM alpine:3.24 AS font-maker
 ARG FONT_MAKER_COMMIT
 RUN apk add --no-cache boost-dev build-base clang cmake freetype-dev git
 RUN git clone https://github.com/maplibre/font-maker.git /src \
