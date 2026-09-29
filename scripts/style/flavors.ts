@@ -5,9 +5,11 @@
 //   ciruela #2A1638 · ciruela suave #6A5578 · arrebol #F0525A · mango #F7A93B · lila #F3ECF6
 //
 // Reglas de la marca que se respetan aquí:
-// - Arrebol solo en formas (autopistas, POI grandes), nunca en texto pequeño
-//   sobre fondo claro: no llega a 4.5:1.
+// - Arrebol solo en formas (tintes de arrebol en autopistas), nunca en texto
+//   pequeño sobre fondo claro: no llega a 4.5:1.
 // - Todo texto de etiqueta llega a 4.5:1 contra su halo (tests/style/).
+//
+// Los tintes de vías salen de los tokens con mix(): si cambia la marca, cambian.
 import { namedFlavor, type Flavor } from "@protomaps/basemaps";
 
 export const BRAND = {
@@ -18,6 +20,23 @@ export const BRAND = {
   lila: "#F3ECF6",
   blanco: "#FFFFFF",
 } as const;
+
+/** Mezcla dos colores hex: t = 0 devuelve `from`, t = 1 devuelve `to`. */
+export function mix(from: string, to: string, t: number): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const parts = [0, 1, 2].map((i) => Math.round(channel(from, i) * (1 - t) + channel(to, i) * t));
+  return `#${parts.map((c) => c.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+}
+
+// Tintes de vías: principales en mango, autopistas en arrebol.
+const MAJOR_CLARO = mix(BRAND.mango, BRAND.blanco, 0.65);
+const MAJOR_CASING_CLARO = mix(BRAND.mango, BRAND.blanco, 0.4);
+const HIGHWAY_CLARO = mix(BRAND.arrebol, BRAND.blanco, 0.65);
+const HIGHWAY_CASING_CLARO = mix(BRAND.arrebol, BRAND.blanco, 0.4);
+const MAJOR_OSCURO = mix(BRAND.mango, BRAND.ciruela, 0.7);
+const MAJOR_CASING_OSCURO = mix(BRAND.mango, BRAND.ciruela, 0.85);
+const HIGHWAY_OSCURO = mix(BRAND.arrebol, BRAND.ciruela, 0.65);
+const HIGHWAY_CASING_OSCURO = mix(BRAND.arrebol, BRAND.ciruela, 0.82);
 
 // Fontstacks generados por `make assets` (config/fontstacks.yml).
 export const FONTS = {
@@ -30,7 +49,8 @@ export const FONTS = {
 const fonts = { regular: FONTS.regular, bold: FONTS.bold, italic: FONTS.italic };
 
 // Claro: tierra lila de la marca, calles blancas con borde lila, vías
-// principales en mango y autopistas en arrebol; etiquetas en ciruela.
+// principales en tinte de mango y autopistas en tinte de arrebol; etiquetas en
+// ciruela.
 export const CLARO: Flavor = {
   ...namedFlavor("light"),
   ...fonts,
@@ -63,25 +83,25 @@ export const CLARO: Flavor = {
   minor_a: "#FFFFFF",
   minor_b: "#FFFFFF",
   link: "#FFFFFF",
-  major: "#FCE4BE",
-  highway: "#F9C4C6",
+  major: MAJOR_CLARO,
+  highway: HIGHWAY_CLARO,
   minor_service_casing: "#D9CBE1",
   minor_casing: "#D9CBE1",
   link_casing: "#D9CBE1",
-  major_casing_early: "#F2C98A",
-  major_casing_late: "#F2C98A",
-  highway_casing_early: "#F0A0A5",
-  highway_casing_late: "#F0A0A5",
+  major_casing_early: MAJOR_CASING_CLARO,
+  major_casing_late: MAJOR_CASING_CLARO,
+  highway_casing_early: HIGHWAY_CASING_CLARO,
+  highway_casing_late: HIGHWAY_CASING_CLARO,
   bridges_other: "#FFFFFF",
   bridges_minor: "#FFFFFF",
   bridges_link: "#FFFFFF",
-  bridges_major: "#FCE4BE",
-  bridges_highway: "#F9C4C6",
+  bridges_major: MAJOR_CLARO,
+  bridges_highway: HIGHWAY_CLARO,
   bridges_other_casing: "#DCCDE3",
   bridges_minor_casing: "#DCCDE3",
   bridges_link_casing: "#DCCDE3",
-  bridges_major_casing: "#EDBF7A",
-  bridges_highway_casing: "#EC9096",
+  bridges_major_casing: MAJOR_CASING_CLARO,
+  bridges_highway_casing: HIGHWAY_CASING_CLARO,
 
   roads_label_minor: BRAND.ciruelaSuave,
   roads_label_minor_halo: BRAND.blanco,
@@ -113,7 +133,8 @@ export const CLARO: Flavor = {
 };
 
 // Oscuro: ciruela profunda como tierra, calles en ciruela más clara, vías
-// principales en mango apagado, autopistas en arrebol oscuro; etiquetas en lila.
+// principales y autopistas en mango y arrebol mezclados con ciruela; etiquetas
+// en lila.
 export const OSCURO: Flavor = {
   ...namedFlavor("dark"),
   ...fonts,
@@ -145,25 +166,25 @@ export const OSCURO: Flavor = {
   minor_a: "#3B2947",
   minor_b: "#3B2947",
   link: "#3B2947",
-  major: "#5B4127",
-  highway: "#6A2B35",
+  major: MAJOR_OSCURO,
+  highway: HIGHWAY_OSCURO,
   minor_service_casing: BRAND.ciruela,
   minor_casing: BRAND.ciruela,
   link_casing: BRAND.ciruela,
-  major_casing_early: "#3D2A1A",
-  major_casing_late: "#3D2A1A",
-  highway_casing_early: "#471B23",
-  highway_casing_late: "#471B23",
+  major_casing_early: MAJOR_CASING_OSCURO,
+  major_casing_late: MAJOR_CASING_OSCURO,
+  highway_casing_early: HIGHWAY_CASING_OSCURO,
+  highway_casing_late: HIGHWAY_CASING_OSCURO,
   bridges_other: "#3B2947",
   bridges_minor: "#3B2947",
   bridges_link: "#3B2947",
-  bridges_major: "#5B4127",
-  bridges_highway: "#6A2B35",
+  bridges_major: MAJOR_OSCURO,
+  bridges_highway: HIGHWAY_OSCURO,
   bridges_other_casing: "#21122C",
   bridges_minor_casing: "#21122C",
   bridges_link_casing: "#21122C",
-  bridges_major_casing: "#33231A",
-  bridges_highway_casing: "#3A161D",
+  bridges_major_casing: MAJOR_CASING_OSCURO,
+  bridges_highway_casing: HIGHWAY_CASING_OSCURO,
 
   roads_label_minor: "#CDBBD8",
   roads_label_minor_halo: BRAND.ciruela,
