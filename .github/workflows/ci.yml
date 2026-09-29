@@ -132,6 +132,25 @@ jobs:
           jq -e '.glyphs_sha256 | test("^[0-9a-f]{64}$")' build/assets/assets.json
       - name: make extract
         run: docker compose run --rm tools make extract
+      # La próxima release extrae la build de data/build.json y exige su SHA-256.
+      # Si ya no se puede (Protomaps borró la build, o este PR cambia la región
+      # o go-pmtiles), se avisa aquí y no al publicar. Es un aviso y no un fallo:
+      # los datos nuevos los propone update.yml después de fusionar.
+      - name: data/build.json sigue siendo reproducible
+        run: |
+          build="$(jq -r .protomaps_build data/build.json)"
+          want="$(jq -r .sha256 data/build.json)"
+          if ! docker compose run --rm -e BUILD_DATE="$build" tools make extract BUILD_DIR=build/datos >"$RUNNER_TEMP/datos.log" 2>&1; then
+            tail -n 5 "$RUNNER_TEMP/datos.log"
+            echo "::warning title=data/build.json::no se pudo extraer la build $build: la próxima release fallará. Corré Actualizar extracto, o re-adjuntá con build_date."
+            exit 0
+          fi
+          got="$(jq -r .sha256 build/datos/build.json)"
+          if [[ "$got" == "$want" ]]; then
+            echo "La build $build sigue dando $want"
+          else
+            echo "::warning title=data/build.json::la build $build ahora da $got y no $want (¿cambió la región o go-pmtiles?): la próxima release fallará. Tras fusionar, corré Actualizar extracto."
+          fi
       - name: make style
         run: docker compose run --rm tools make style STYLE_BASE_URL="$STYLE_BASE_URL"
         env:
@@ -167,6 +186,15 @@ jobs:
             '.sha256 == $sha and .bytes > 0 and (.protomaps_build | test("^[0-9]{8}$"))' build/build.json
           docker compose run --rm tools pmtiles show "build/$name.pmtiles"
           cat build/extract-report.txt
+      # El conteo por zoom (reporte mensual) tiene que sumar lo que declara el
+      # encabezado del PMTiles real: addressed_tiles, uint64 en el byte 72.
+      - name: Conteo de tiles del extracto
+        run: |
+          name="$(yq -r .name config/region.yml)"
+          stats="$(docker compose run --rm tools node scripts/tile-stats.ts "build/$name.pmtiles")"
+          echo "$stats"
+          addressed="$(od -An -t u8 -j 72 -N 8 "build/$name.pmtiles" | tr -d ' ')"
+          jq -e --argjson n "$addressed" '.tiles == $n and ([.by_zoom[]] | add) == $n' <<<"$stats"
       - name: make site
         run: docker compose run --rm tools make site STYLE_BASE_URL=https://tiles.example.com/ci
       - name: Verificación del sitio

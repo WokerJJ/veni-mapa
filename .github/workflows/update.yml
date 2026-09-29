@@ -1,0 +1,137 @@
+name: Actualizar extracto
+
+# Cada mes (y a mano) regenera el extracto de OpenStreetMap desde la build de
+# Protomaps, lo compara con la última release y propone el cambio en un PR:
+# data/build.json (build, tamaño, SHA-256 y tiles por zoom) más un reporte en
+# el cuerpo. Al fusionarlo, la próxima release usa esa build (release.yml).
+on:
+  schedule:
+    # Día 3 de cada mes a las 07:23 UTC (02:23 en Colombia).
+    - cron: "23 7 3 * *"
+  workflow_dispatch:
+    inputs:
+      build_date:
+        description: "Build de Protomaps (AAAAMMDD). Vacío: la más reciente."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-extract
+  cancel-in-progress: false
+
+env:
+  BRANCH: chore/actualizar-extracto
+
+jobs:
+  update:
+    name: Regenerar y proponer
+    runs-on: ubuntu-latest
+    permissions:
+      # Empujar la rama del PR.
+      contents: write
+      # Abrir o actualizar el PR.
+      pull-requests: write
+    steps:
+      - name: Build pedida
+        env:
+          INPUT_BUILD_DATE: ${{ inputs.build_date }}
+        run: |
+          [[ -z "$INPUT_BUILD_DATE" || "$INPUT_BUILD_DATE" =~ ^[0-9]{8}$ ]] \
+            || { echo "::error::build_date debe ser AAAAMMDD (recibido: '$INPUT_BUILD_DATE')"; exit 1; }
+          echo "BUILD_DATE=$INPUT_BUILD_DATE" >>"$GITHUB_ENV"
+      # Siempre main: el PR va contra main aunque se lance desde otra rama. Sin
+      # credenciales guardadas mientras corren npm ci y el procesamiento de
+      # datos bajados de la red; el token se usa solo en el paso del PR.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Usuario del runner para el contenedor
+        run: |
+          echo "HOST_UID=$(id -u)" >>"$GITHUB_ENV"
+          echo "HOST_GID=$(id -g)" >>"$GITHUB_ENV"
+          mkdir -p node_modules
+      - uses: docker/setup-buildx-action@v4
+      - name: Imagen de herramientas
+        uses: docker/build-push-action@v7
+        with:
+          context: docker/tools
+          tags: veni-mapa-tools
+          load: true
+          cache-from: type=gha,scope=tools
+          cache-to: type=gha,scope=tools,mode=max
+      # BUILD_DATE llega al contenedor por compose.yaml.
+      - name: make extract
+        run: docker compose run --rm tools make extract
+      # Lo que se propone pasa la misma verificación que en CI.
+      - name: make style verify
+        run: docker compose run --rm tools make style verify
+      # La última release que ya tiene sus archivos (manifest.json): una recién
+      # creada por release-please puede no tenerlos todavía, o no haberlos
+      # recibido nunca si su job de artefactos falló.
+      - name: Última release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          region="$(yq -r .name config/region.yml)"
+          tags="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq '.[].tagName')"
+          tag=""
+          while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            assets="$(gh release view "$candidate" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+            if grep -qx manifest.json <<<"$assets" && grep -qxF "$region.pmtiles" <<<"$assets"; then
+              tag="$candidate"
+              break
+            fi
+            echo "::notice::$candidate no tiene manifest.json y $region.pmtiles: se busca una anterior"
+          done <<<"$tags"
+          mkdir -p build/anterior
+          if [[ -n "$tag" ]]; then
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir build/anterior \
+              --pattern manifest.json --pattern "$region.pmtiles"
+            echo "PREVIOUS_ARGS=--previous-manifest build/anterior/manifest.json --previous-pmtiles build/anterior/$region.pmtiles" >>"$GITHUB_ENV"
+            echo "Comparando con $tag"
+          else
+            echo "PREVIOUS_ARGS=" >>"$GITHUB_ENV"
+            echo "Sin releases con archivos: el reporte no compara"
+          fi
+          echo "REGION=$region" >>"$GITHUB_ENV"
+      - name: Reporte y data/build.json
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # PREVIOUS_ARGS se separa a propósito
+          docker compose run --rm tools node scripts/update-report.ts \
+            --build build/build.json --pmtiles "build/$REGION.pmtiles" \
+            --data data/build.json --report build/update-report.md $PREVIOUS_ARGS >build/title.txt
+          cat build/update-report.md >>"$GITHUB_STEP_SUMMARY"
+      - name: PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/build.json; then
+            echo "::notice title=Sin cambios::data/build.json no cambió: el extracto es el mismo."
+            exit 0
+          fi
+          title="$(cat build/title.txt)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git add data/build.json
+          git commit -m "$title"
+          # La rama es del workflow: cada corrida la rehace desde main.
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" \
+            push --force "https://github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
+          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "$number" ]]; then
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file build/update-report.md
+            echo "PR #$number actualizado"
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --title "$title" --body-file build/update-report.md
+          fi

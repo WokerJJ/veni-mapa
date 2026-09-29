@@ -132,6 +132,16 @@ Requisito del repositorio: *Settings → Actions → General → Workflow permis
 
 Los PR y ramas que crea `GITHUB_TOKEN` no disparan otros workflows, así que `release.yml` lanza la CI (`workflow_dispatch`) sobre la rama del PR de release para que tenga el check `ci-ok`. Si la subida de artefactos falla, *Actions → Release → Run workflow* con el tag los vuelve a construir y adjuntar. Si la release ya tiene `manifest.json`, se reconstruye con la misma build de Protomaps y falla si el extracto no da el mismo SHA-256: una versión publicada no cambia de datos.
 
+## Actualización mensual
+
+[`update.yml`](.github/workflows/update.yml) regenera el extracto el día 3 de cada mes, o a mano con *Actions → Actualizar extracto → Run workflow* (entrada opcional `build_date`, AAAAMMDD). Lo verifica con `make verify`, lo compara con la última release y, si cambió, abre o actualiza el PR `chore(datos): actualizar extracto de OSM a AAAA-MM-DD` en la rama `chore/actualizar-extracto`. El PR solo cambia [`data/build.json`](data/build.json) (build de Protomaps, tamaño, SHA-256 y tiles por zoom) y trae en el cuerpo el reporte: build, tamaño, tiles totales y por zoom, antes y después.
+
+`data/build.json` es la build aprobada: al publicar una release, `release.yml` extrae esa misma build y falla si el PMTiles no da ese SHA-256. Así una release trae exactamente los datos revisados en el PR. Los tiles por zoom los cuenta [`scripts/tile-stats.ts`](scripts/tile-stats.ts) leyendo los directorios del PMTiles (go-pmtiles no los reporta).
+
+Como el de release, el PR lo abre `GITHUB_TOKEN`: sus workflows esperan *Approve and run* antes de correr (issue #37). La rama `chore/actualizar-extracto` es del workflow: cada corrida la rehace desde `main` y pisa lo que se haya empujado a mano.
+
+El PR es `chore(datos)`, así que por sí solo no crea una release: la build aprobada se usa en la siguiente `feat` o `fix`. Las builds diarias de Protomaps no se guardan para siempre, y la CI de cada PR avisa (*data/build.json sigue siendo reproducible*) si la build de `data/build.json` ya no se puede extraer o ya no da su SHA-256, por ejemplo porque el PR cambia la región o go-pmtiles. Si una release llega a fallar por eso, *Actions → Release → Run workflow* con el tag y `build_date` la construye con otra build.
+
 ## Región
 
 La región se define en un solo archivo, [`config/region.yml`](config/region.yml): la caja delimitadora (oeste, sur, este, norte, en WGS84) que cubre el casco urbano de Roldanillo y sus veredas, el zoom máximo y la vista inicial de la demo. `scripts/region.sh` valida el archivo y lo expone como variables de `make`, así ningún otro archivo repite esos valores.
@@ -143,7 +153,7 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 | Qué | Cómo | Dónde corre |
 | --- | --- | --- |
 | Scripts del pipeline (región, extracción, recursos, sitio, verificación, release, publicación en R2) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
-| Generador de estilos, `build.ts`, servidor y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
+| Generador de estilos, `build.ts`, servidor, conteo de tiles, reporte de actualización y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
 | Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
 
