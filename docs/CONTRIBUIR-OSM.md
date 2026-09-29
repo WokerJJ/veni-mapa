@@ -42,7 +42,7 @@ Guías oficiales: [Cómo contribuir](https://wiki.openstreetmap.org/wiki/ES:C%C3
 
 1. **OpenStreetMap:** el cambio se ve en openstreetmap.org a los pocos minutos.
 2. **Protomaps:** publica cada día una build del planeta a partir de OSM; el cambio entra en una de las siguientes builds.
-3. **Este repositorio:** el día 3 de cada mes, la [actualización mensual](../README.md#actualización-mensual) recorta la build más reciente y abre un PR con la comparación. Al fusionarlo sale una versión nueva del mapa.
+3. **Este repositorio:** el día 3 de cada mes, la [actualización mensual](../README.md#actualización-mensual) recorta la build más reciente y abre un PR con la comparación. Al fusionarlo, release-please prepara el PR de una versión de parche, y al fusionar ese PR se publica la versión nueva del mapa.
 4. **La app:** usa esa versión cuando se actualiza a la release nueva.
 
 En total, entre unos días y algo más de un mes. Si hace falta antes, se puede lanzar la actualización a mano (*Actions → Actualizar extracto → Run workflow*).
