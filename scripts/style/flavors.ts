@@ -7,7 +7,7 @@
 // Reglas de la marca que se respetan aquí:
 // - Arrebol solo en formas (tintes de arrebol en autopistas), nunca en texto
 //   pequeño sobre fondo claro: no llega a 4.5:1.
-// - Todo texto de etiqueta llega a 4.5:1 contra su halo (tests/style/).
+// - Todo texto de etiqueta llega a 4.5:1 contra su halo (tests/node/).
 //
 // Los tintes de vías salen de los tokens con mix(): si cambia la marca, cambian.
 import { namedFlavor, type Flavor } from "@protomaps/basemaps";
