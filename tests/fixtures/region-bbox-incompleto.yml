@@ -1,7 +1,0 @@
-name: prueba
-title: Prueba
-bbox: [-76.30, 4.30, -76.00]
-maxzoom: 16
-demo:
-  center: [-76.15, 4.41]
-  zoom: 13
