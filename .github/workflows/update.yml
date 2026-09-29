@@ -51,6 +51,11 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      # Solo avisa (::warning::): una imagen vieja no frena la actualización de
+      # datos, y un fallo de la API de Docker Hub tampoco.
+      - name: Parches de Node en la imagen
+        continue-on-error: true
+        run: scripts/node-tag-age.sh
       - name: Usuario del runner para el contenedor
         run: |
           echo "HOST_UID=$(id -u)" >>"$GITHUB_ENV"
