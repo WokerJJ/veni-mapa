@@ -43,19 +43,35 @@ Cuatro estilos MapLibre generados con [`@protomaps/basemaps`](https://github.com
 | | Claro | Oscuro |
 | --- | --- | --- |
 | Tierra | lila `#F3ECF6` | ciruela profunda `#1C0F26` |
-| Vías principales | mango | mango apagado |
-| Autopistas | arrebol | arrebol oscuro |
+| Vías principales | tinte de mango | mango mezclado con ciruela |
+| Autopistas | tinte de arrebol | arrebol mezclado con ciruela |
 | Etiquetas | ciruela `#2A1638` | lila |
-| Lugares | Bricolage Grotesque Bold | Bricolage Grotesque Bold |
+| Lugares (municipio, barrios, departamentos, países) | Bricolage Grotesque Bold | Bricolage Grotesque Bold |
 
+- Los tintes se calculan desde los tokens de la marca (`mix()`), así un cambio de marca se propaga.
 - Etiquetas en español (`name:es`) o inglés (`name:en`), con el nombre local como respaldo.
-- Todo texto llega a 4.5:1 de contraste contra su halo, y arrebol nunca es color de texto sobre fondo claro: lo verifican las pruebas (`make check`).
-- Las URLs del PMTiles, los glyphs y los sprites se escriben absolutas con `STYLE_BASE_URL`:
-  ```bash
-  docker compose run --rm tools make style STYLE_BASE_URL=https://tiles.veniroldanillo.co/v0.1.0
-  ```
+- Toda capa con texto llega a 4.5:1 de contraste contra su halo, medido sobre el estilo generado; arrebol nunca es color de texto sobre fondo claro. Lo verifican las pruebas (`make check`).
 
-El generador es TypeScript que Node 24 ejecuta directamente, sin paso de compilación; `tsc` solo verifica tipos. Dentro del contenedor, `node_modules` vive en un volumen de Docker propio: así las dependencias de Linux (TypeScript 7 trae un binario nativo por plataforma) no chocan con las que instales en tu sistema para el editor.
+### Dónde se publican
+
+El estilo escribe URLs absolutas a partir de `STYLE_BASE_URL` y espera este árbol bajo esa base:
+
+```text
+<STYLE_BASE_URL>/
+├── <región>.pmtiles          build/roldanillo.pmtiles
+├── fonts/<fontstack>/…pbf    build/assets/fonts/
+└── sprites/{light,dark}…     build/assets/sprites/
+```
+
+```bash
+docker compose run --rm tools make style STYLE_BASE_URL=https://tiles.veniroldanillo.co/v0.1.0 STYLE_VERSION=0.1.0
+```
+
+`STYLE_BASE_URL` debe ser `http(s)`, sin usuario, contraseña, query ni fragmento (por defecto `http://localhost:8080`); `STYLE_VERSION` queda en los metadatos (por defecto `dev`), junto con la base y la build de Protomaps del extracto.
+
+### Node dentro del contenedor
+
+El generador es TypeScript que Node 24 ejecuta directamente, sin paso de compilación; `tsc` solo verifica tipos. `make` instala las dependencias con `npm ci`, que respeta el `package-lock.json` exacto. Dentro del contenedor, `node_modules` vive en un volumen de Docker propio: TypeScript 7 trae un binario nativo por plataforma y las dependencias de Linux no pueden compartirse con las que instales en tu sistema para el editor. En Linux, creá la carpeta antes de la primera corrida (`mkdir -p node_modules`) para que el punto de montaje no quede de root.
 
 ## Tipografías y sprites
 
