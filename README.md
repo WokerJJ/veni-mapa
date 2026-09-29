@@ -126,7 +126,7 @@ font-maker se fija en `FONT_MAKER_COMMIT` del [Dockerfile](docker/tools/Dockerfi
 
 Si existen los secrets de R2, la release también se publica en `https://tiles.veniroldanillo.co/vX.Y.Z/` y `/latest/`; hoy está preparado y desactivado (ver [docs/PUBLICACION.md](docs/PUBLICACION.md#cloudflare-r2-producción)).
 
-Para la app, `manifest.json` es la entrada: dice qué build de OpenStreetMap trae la versión y cómo verificar cada archivo. Antes de 1.0, `feat` sube la versión menor y `fix` la de parche.
+Para la app, `manifest.json` es la entrada: dice qué build de OpenStreetMap trae la versión y cómo verificar cada archivo. Numeración antes de 1.0: `feat` y `fix` suben el parche (0.1.0 → 0.1.1) y un cambio incompatible (`feat!` o `BREAKING CHANGE`) sube la menor. La versión menor se sube a mano al empezar un milestone nuevo (por ejemplo, 0.2.0 para las rutas, #29): se agrega al commit que se fusiona en `main` la línea `Release-As: 0.2.0`, y release-please propone esa versión.
 
 Requisito del repositorio: *Settings → Actions → General → Workflow permissions →* **Allow GitHub Actions to create and approve pull requests**. Sin eso release-please falla al abrir el PR de release.
 
