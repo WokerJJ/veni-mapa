@@ -105,7 +105,9 @@ font-maker se compila sobre `alpine` y corre sobre `node:*-alpine`: las dos etap
 1. Cambiar `ALPINE_VERSION` (y `NODE_MAJOR` si cambia la mayor de Node; en ese caso también `@types/node`, la regla `ignore` de `@types/node` en [`dependabot.yml`](.github/dependabot.yml) y la versión de Node de la CI).
 2. `docker compose build tools` y correr `make all`, `make check`, `make verify` y las pruebas.
 
-Cuándo revisarlo: la imagen oficial de Node solo publica parches sobre las Alpine vigentes. Cuando sale una Alpine nueva (en mayo y en diciembre), la etiqueta `node:<mayor>-alpine<vieja>` deja de recibir parches de Node.
+Cuándo revisarlo: la imagen oficial de Node solo publica parches sobre las Alpine vigentes. Cuando sale una Alpine nueva (en mayo y en diciembre), la etiqueta `node:<mayor>-alpine<vieja>` deja de recibir parches de Node. La [actualización mensual](#actualización-mensual) lo vigila con [`scripts/node-tag-age.sh`](scripts/node-tag-age.sh): deja un aviso (`::warning::`, también en el resumen de la corrida) si la etiqueta del Dockerfile lleva más de 30 días sin push frente a `node:<mayor>-alpine` (hay que subir `ALPINE_VERSION`), si `node:<mayor>-alpine` lleva más de 90 días sin push (la mayor de Node quedó sin soporte: hay que subir `NODE_MAJOR`) o si no pudo comprobarlo.
+
+Al cambiar de Alpine, compará `glyphs_sha256` de `build/assets/assets.json` antes y después: si cambia (por ejemplo por otra FreeType), explicalo en el PR. El paso de 3.22 a 3.24 (FreeType 2.13.3 → 2.14.3) dio glyphs idénticos.
 
 ### Actualizar recursos de terceros
 
@@ -191,6 +193,8 @@ Si la subida de artefactos falla, *Actions → Release → Run workflow* con el 
 
 El PR lo abre la GitHub App si está configurada; si no, `GITHUB_TOKEN`, y sus workflows esperan *Approve and run* (ver [PR del bot y la CI](#pr-del-bot-y-la-ci)). La rama `chore/actualizar-extracto` es del workflow: cada corrida la rehace desde `main` y pisa lo que se haya empujado a mano.
 
+Antes de regenerar, la corrida comprueba que la etiqueta de Node de la imagen siga recibiendo parches (ver [Actualizar la imagen de herramientas](#actualizar-la-imagen-de-herramientas)); si no, deja un aviso sin frenar la actualización.
+
 El PR es `deps(datos)`, un tipo visible en el CHANGELOG (sección *Dependencias*): al fusionarlo, release-please abre o actualiza el PR de release con una versión de parche, y esa release publica la build aprobada. Con un tipo oculto como `chore` no habría release hasta el siguiente commit visible; una prueba de `tests/node/update-report.test.ts` lo impide. Las builds diarias de Protomaps no se guardan para siempre, y la CI de cada PR avisa (*data/build.json sigue siendo reproducible*) si la build de `data/build.json` ya no se puede extraer o ya no da su SHA-256, por ejemplo porque el PR cambia la región o go-pmtiles. Si una release llega a fallar por eso, *Actions → Release → Run workflow* con el tag y `build_date` la construye con otra build.
 
 ## Región
@@ -203,7 +207,7 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 
 | Qué | Cómo | Dónde corre |
 | --- | --- | --- |
-| Scripts del pipeline (región, extracción, recursos, sitio, verificación, release, publicación en R2) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
+| Scripts del pipeline (región, extracción, recursos, sitio, verificación, release, publicación en R2, parches de Node de la imagen) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
 | Generador de estilos, `build.ts`, servidor, conteo de tiles, reporte de actualización y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
 | Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
