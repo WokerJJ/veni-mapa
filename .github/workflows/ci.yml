@@ -52,13 +52,29 @@ jobs:
 
   # El pipeline corre en la misma imagen de herramientas que se usa en local,
   # así CI y desarrollo comparten versiones de make, yq, jq y pmtiles.
+  #
+  # La extracción contra la build real de Protomaps es intencional: es lo que el
+  # pipeline produce. Las pruebas de los scripts, en cambio, no usan red.
   pipeline:
     name: Pipeline (imagen de herramientas)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Usuario del runner para el contenedor
+        run: |
+          echo "HOST_UID=$(id -u)" >>"$GITHUB_ENV"
+          echo "HOST_GID=$(id -g)" >>"$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v4
+      # Caché de capas en GitHub Actions: la imagen solo se reconstruye cuando
+      # cambia el Dockerfile.
       - name: Imagen de herramientas
-        run: docker compose build tools
+        uses: docker/build-push-action@v7
+        with:
+          context: docker/tools
+          tags: veni-mapa-tools
+          load: true
+          cache-from: type=gha,scope=tools
+          cache-to: type=gha,scope=tools,mode=max
       - name: Pruebas en la imagen
         run: |
           for test in tests/*_test.sh; do
@@ -66,12 +82,22 @@ jobs:
             docker compose run --rm tools bash "$test"
             echo "::endgroup::"
           done
+      - name: make help y make clean funcionan sin generar la región
+        run: |
+          docker compose run --rm tools make help | grep -q '^Uso:'
+          docker compose run --rm tools make clean
       - name: make extract
         run: docker compose run --rm tools make extract
-      - name: Metadatos del extracto
+      - name: Verificación del extracto
         run: |
-          docker compose run --rm tools bash -c 'pmtiles show "build/$(yq -r .name config/region.yml).pmtiles"'
-          cat build/extract-report.txt build/build.json
+          name="$(yq -r .name config/region.yml)"
+          test -s "build/$name.pmtiles"
+          # Los archivos generados son del usuario del runner, no de root.
+          test "$(stat -c %u build/build.json)" = "$(id -u)"
+          jq -e --arg sha "$(sha256sum "build/$name.pmtiles" | cut -d' ' -f1)" \
+            '.sha256 == $sha and .bytes > 0 and (.protomaps_build | test("^[0-9]{8}$"))' build/build.json
+          docker compose run --rm tools pmtiles show "build/$name.pmtiles"
+          cat build/extract-report.txt
       - uses: actions/upload-artifact@v7
         with:
           name: extracto
