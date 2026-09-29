@@ -3,7 +3,8 @@ name: Actualizar extracto
 # Cada mes (y a mano) regenera el extracto de OpenStreetMap desde la build de
 # Protomaps, lo compara con la última release y propone el cambio en un PR:
 # data/build.json (build, tamaño, SHA-256 y tiles por zoom) más un reporte en
-# el cuerpo. Al fusionarlo, la próxima release usa esa build (release.yml).
+# el cuerpo. El PR es deps(datos), un tipo visible para release-please: al
+# fusionarlo se prepara una release de parche que usa esa build (release.yml).
 on:
   schedule:
     # Día 3 de cada mes a las 07:23 UTC (02:23 en Colombia).
@@ -51,6 +52,11 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      # Solo avisa (::warning::): una imagen vieja no frena la actualización de
+      # datos, y un fallo de la API de Docker Hub tampoco.
+      - name: Parches de Node en la imagen
+        continue-on-error: true
+        run: scripts/node-tag-age.sh
       - name: Usuario del runner para el contenedor
         run: |
           echo "HOST_UID=$(id -u)" >>"$GITHUB_ENV"
