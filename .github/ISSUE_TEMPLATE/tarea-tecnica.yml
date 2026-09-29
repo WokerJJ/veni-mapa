@@ -1,0 +1,24 @@
+name: Tarea técnica
+description: Mantenimiento, CI, documentación o refactor sin cambio visible.
+title: "chore: "
+labels: ["type:chore"]
+body:
+  - type: textarea
+    id: tarea
+    attributes:
+      label: Tarea
+    validations:
+      required: true
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptación
+      value: |
+        - [ ] 
+    validations:
+      required: true
+  - type: input
+    id: dependencias
+    attributes:
+      label: Depende de
+      placeholder: "#1"

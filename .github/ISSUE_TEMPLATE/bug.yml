@@ -1,0 +1,35 @@
+name: Bug
+description: Algo del pipeline, el estilo o la demo no funciona como debería.
+title: "fix: "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: que-pasa
+    attributes:
+      label: Qué pasa
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué debería pasar
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducir
+      value: |
+        1. 
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión o commit
+      placeholder: v0.1.0
+  - type: textarea
+    id: evidencia
+    attributes:
+      label: Evidencia
+      description: Logs, capturas, navegador.

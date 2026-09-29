@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/WokerJJ/veni-mapa/security/advisories/new
+    about: Las vulnerabilidades se reportan en privado, no en issues.
+  - name: Corregir datos del mapa en OpenStreetMap
+    url: https://www.openstreetmap.org/#map=14/4.4128/-76.1547
+    about: Calles, lugares o nombres mal ubicados se corrigen directamente en OpenStreetMap.

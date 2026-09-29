@@ -1,0 +1,31 @@
+name: Funcionalidad
+description: Algo nuevo que el pipeline, el estilo o la demo deben hacer.
+title: "feat: "
+labels: ["type:feat"]
+body:
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Objetivo
+      description: Qué se necesita y por qué.
+    validations:
+      required: true
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptación
+      description: Lista verificable. Cada punto debe poder comprobarse.
+      value: |
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: notas
+    attributes:
+      label: Notas técnicas
+      description: Enfoque, alternativas, enlaces.
+  - type: input
+    id: dependencias
+    attributes:
+      label: Depende de
+      placeholder: "#1, #2"
