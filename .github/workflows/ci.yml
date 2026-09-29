@@ -103,7 +103,7 @@ jobs:
         run: |
           for test in tests/*_test.sh; do
             echo "::group::$test"
-            docker compose run --rm -e ASSETS_TEST_REQUIRE_FULL=1 -e SITE_TEST_REQUIRE_DEPS=1 tools bash "$test"
+            docker compose run --rm -e ASSETS_TEST_REQUIRE_FULL=1 -e SITE_TEST_REQUIRE_DEPS=1 -e VERIFY_TEST_REQUIRE_DEPS=1 tools bash "$test"
             echo "::endgroup::"
           done
       - name: Verificación de los recursos
@@ -181,6 +181,32 @@ jobs:
           for file in "${files[@]}"; do
             test -s "build/site/$file" || { echo "::error::falta build/site/$file"; exit 1; }
           done
+      # Estilos válidos según MapLibre y extracto con tipo, caja, zoom, capas y tamaño.
+      - name: make verify
+        run: docker compose run --rm tools make verify
+      # Render en Chromium sin interfaz (en el runner: Playwright no corre en
+      # Alpine). El sitio se arma con la base por defecto, la misma URL en la que
+      # Playwright lo sirve.
+      - name: Sitio para el render
+        run: docker compose run --rm tools make style site
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Dependencias y Chromium en el runner
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Render de la demo
+        run: npm run test:render
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: render
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: extracto
