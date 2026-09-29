@@ -33,3 +33,30 @@ Diario de avance por bloques (máximo 3 issues por bloque).
 - El PR #15 se fusionó antes de incorporar su revisión; las correcciones entraron por #17/#18.
 
 **Sigue:** bloque 2 — #5 estilo claro/oscuro ES/EN, #6 validación y render en CI, #7 demo en GitHub Pages.
+
+## 2026-09-30 · Bloque 2: estilos, demo y verificación
+
+**Issues cerrados:** #5 estilos (PR #23), #7 demo en GitHub Pages (PR #26 y #28), #6 validación y render (PR #30). Además, #21 documentación del bloque 1 (PR #22).
+
+**Qué quedó funcionando**
+
+- `make style`: cuatro estilos MapLibre (claro/oscuro × ES/EN) con `@protomaps/basemaps` y la paleta Vení; contraste WCAG ≥ 4.5:1 medido sobre el estilo generado; metadatos con base, versión, build de Protomaps y caja de la región.
+- Demo pública en <https://wokerjj.github.io/veni-mapa/>, desplegada desde artefacto: MapLibre y PMTiles autohospedados, interfaz y controles en ES/EN, cámara limitada a la región. Pages sirve rangos (`206`, `Content-Range`, CORS abierto).
+- `make site`, `make serve` (servidor con rangos, probado contra traversal, archivos vacíos y descargas abortadas), `make verify` y render con Playwright en CI, con capturas como artefacto.
+- Licencias de todo lo empaquetado en `vendor/` generadas con `make licenses`.
+
+**Decisiones**
+
+- TypeScript ejecutado directamente por Node 24; `tsc` solo verifica. `node_modules` del contenedor en un volumen propio (TypeScript 7 trae binario por plataforma).
+- La demo crea el mapa con el centro y el zoom del estilo: sin eso quedaba vacía hasta mover la cámara (reportado al probarla). Cambio de tema con `setStyle` sin diff.
+- La caja de la región viaja en `veni:bounds` y los visores la usan como `maxBounds`: el extracto guarda tiles enteros y en zooms bajos cubren medio continente.
+- El render corre en el runner (Playwright no funciona en Alpine) y sirve el sitio en la misma base con la que se generaron los estilos.
+- Para la app (decisión del usuario): ubicación del usuario en el dispositivo, rutas calculadas en el navegador con un grafo que generará este repositorio (#29, v0.2.0) y mapa sin botones de tema o idioma.
+
+**Aprendizajes**
+
+- Probar en el navegador encontró un error que ninguna revisión vio (mapa vacío al abrir). Chromium sin interfaz no lo reproduce: la prueba verifica su síntoma determinista, el arranque en `#vista=0/0/0`.
+- Las mutaciones mostraron pruebas que no probaban nada (traversal normalizado por `fetch`, contar features en vez de mirar píxeles, botones sin buscar).
+- `--retry` de curl no reintenta cortes SSL: hace falta `--retry-all-errors`.
+
+**Sigue:** bloque 3 — #8 release v0.1.0, #9 publicación en R2 preparada y desactivada, #10 actualización mensual del extracto.
