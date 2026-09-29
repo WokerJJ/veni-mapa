@@ -126,7 +126,9 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
 | Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
 
-La CI corre todo lo anterior en cada PR; las suites no pueden quedar omitidas y el render sube sus capturas como artefacto.
+El render sirve `build/site` en la base con la que se generaron los estilos (por defecto `http://localhost:8080`; si ya corre `make serve`, lo reutiliza). Para usar otro puerto, generá el sitio con esa base: `docker compose run --rm tools make style site STYLE_BASE_URL=http://localhost:8095` y después `npm run test:render`.
+
+La CI corre todo lo anterior en cada PR; las suites no pueden quedar omitidas, una prueba de render que solo pasa al reintentar cuenta como fallo, y el render sube sus capturas como artefacto. Pages corre `make verify` antes de publicar.
 
 ## Documentación
 
