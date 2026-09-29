@@ -42,12 +42,43 @@ jobs:
       - name: Pruebas con mawk y locale es_CO
         run: AWK=mawk LC_ALL=es_CO.UTF-8 bash tests/region_test.sh
 
+  # El pipeline corre en la misma imagen de herramientas que se usa en local,
+  # así CI y desarrollo comparten versiones de make, yq, jq y pmtiles.
+  pipeline:
+    name: Pipeline (imagen de herramientas)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Imagen de herramientas
+        run: docker compose build tools
+      - name: Pruebas en la imagen
+        run: |
+          for test in tests/*_test.sh; do
+            echo "::group::$test"
+            docker compose run --rm tools bash "$test"
+            echo "::endgroup::"
+          done
+      - name: make extract
+        run: docker compose run --rm tools make extract
+      - name: Metadatos del extracto
+        run: |
+          docker compose run --rm tools bash -c 'pmtiles show "build/$(yq -r .name config/region.yml).pmtiles"'
+          cat build/extract-report.txt build/build.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: extracto
+          path: |
+            build/*.pmtiles
+            build/extract-report.txt
+            build/build.json
+          retention-days: 7
+
   # Único check obligatorio en la protección de main: agrega el resultado de
   # todos los jobs, así sumar jobs nuevos no obliga a tocar la protección.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [actionlint, region]
+    needs: [actionlint, region, pipeline]
     runs-on: ubuntu-latest
     steps:
       - name: Todos los jobs pasaron
