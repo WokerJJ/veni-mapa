@@ -120,6 +120,23 @@ jobs:
           jq -e '.glyphs_sha256 | test("^[0-9a-f]{64}$")' build/assets/assets.json
       - name: make extract
         run: docker compose run --rm tools make extract
+      # Tipos y pruebas del generador (sin red) y los cuatro estilos.
+      - name: make check
+        run: docker compose run --rm tools make check
+      - name: make style
+        run: docker compose run --rm tools make style
+      - name: Verificación de los estilos
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in claro oscuro; do
+            for lang in es en; do
+              file="build/style/veni-$variant-$lang.json"
+              jq -e --arg v "$variant" --arg l "$lang"                 '.version == 8 and .metadata["veni:variant"] == $v and .metadata["veni:lang"] == $l
+                 and (.layers | length) > 50 and (.sources.protomaps.url | startswith("pmtiles://"))' "$file" >/dev/null
+              echo "$file: $(jq '.layers | length' "$file") capas"
+            done
+          done
       - name: Verificación del extracto
         run: |
           name="$(yq -r .name config/region.yml)"
@@ -137,6 +154,11 @@ jobs:
             build/*.pmtiles
             build/extract-report.txt
             build/build.json
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        with:
+          name: estilos
+          path: build/style
           retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
