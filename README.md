@@ -21,7 +21,15 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | `serve` | Sirve la demo en local. |
 | `all` | `extract`, `assets` y `style`. |
 
-Para reproducir una versión exacta, fijá la build: `BUILD_DATE=20260928 docker compose run --rm tools make extract`.
+Para reproducir una versión exacta, fijá la build (funciona igual en bash y en PowerShell):
+
+```bash
+docker compose run --rm tools make extract BUILD_DATE=20260928
+```
+
+La misma build produce siempre el mismo archivo (mismo SHA-256 en `build/build.json`).
+
+En Linux, el contenedor corre con tu usuario para que `build/` no quede de root: exportá `HOST_UID=$(id -u)` y `HOST_GID=$(id -g)` si tu uid no es 1000.
 
 La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los tiles de la región (unos 1,6 MB hoy).
 
