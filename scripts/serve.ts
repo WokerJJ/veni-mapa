@@ -2,8 +2,10 @@
 //
 // Servidor estático mínimo con lo que PMTiles necesita: peticiones por rango
 // (206 Partial Content), HEAD y CORS abierto, igual que GitHub Pages.
-import { createReadStream, statSync, type Stats } from "node:fs";
+import { statSync } from "node:fs";
+import { open, type FileHandle } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { pipeline } from "node:stream/promises";
 import { extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -30,6 +32,8 @@ export type ByteRange = { start: number; end: number };
  */
 export function parseRange(header: string | undefined, size: number): ByteRange | null | "invalido" {
   if (!header) return null;
+  // Un rango sobre un archivo vacío nunca es satisfacible (RFC 9110, 14.1.1).
+  if (size === 0) return "invalido";
   const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
   if (!match) return null;
   const [, first = "", last = ""] = match;
@@ -61,8 +65,26 @@ export function resolvePath(root: string, urlPath: string): string | null {
   return path;
 }
 
+/** Abre la ruta (o su index.html si es carpeta) y devuelve el descriptor y su tamaño. */
+async function openFile(path: string): Promise<{ file: FileHandle; size: number; mtimeMs: number; path: string } | null> {
+  for (const candidate of [path, join(path, "index.html")]) {
+    let file: FileHandle | undefined;
+    try {
+      file = await open(candidate, "r");
+      // fstat sobre el mismo descriptor: tamaño y contenido son del mismo
+      // archivo aunque `make site` lo reemplace mientras tanto.
+      const stats = await file.stat();
+      if (stats.isFile()) return { file, size: stats.size, mtimeMs: stats.mtimeMs, path: candidate };
+      await file.close();
+    } catch {
+      await file?.close();
+    }
+  }
+  return null;
+}
+
 export function createHandler(root: string) {
-  return (req: IncomingMessage, res: ServerResponse): void => {
+  return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, ETag");
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -70,44 +92,44 @@ export function createHandler(root: string) {
       return;
     }
 
-    let path = resolvePath(root, req.url ?? "/");
-    let stats: Stats | undefined;
-    try {
-      if (path) stats = statSync(path);
-      if (path && stats?.isDirectory()) {
-        path = join(path, "index.html");
-        stats = statSync(path);
-      }
-    } catch {
-      stats = undefined;
-    }
-    if (!path || !stats?.isFile()) {
+    const path = resolvePath(root, req.url ?? "/");
+    const opened = path ? await openFile(path) : null;
+    if (!opened) {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("No encontrado\n");
       return;
     }
 
-    const size = stats.size;
-    const headers = {
-      "Content-Type": TYPES[extname(path)] ?? "application/octet-stream",
-      "Accept-Ranges": "bytes",
-      "Cache-Control": "no-cache",
-      ETag: `"${size}-${stats.mtimeMs}"`,
-    };
-    const range = parseRange(req.headers.range, size);
-    if (range === "invalido") {
-      res.writeHead(416, { ...headers, "Content-Range": `bytes */${size}` }).end();
-      return;
+    const { file, size } = opened;
+    try {
+      const headers = {
+        "Content-Type": TYPES[extname(opened.path)] ?? "application/octet-stream",
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache",
+        ETag: `"${size}-${opened.mtimeMs}"`,
+      };
+      const range = parseRange(req.headers.range, size);
+      if (range === "invalido") {
+        res.writeHead(416, { ...headers, "Content-Range": `bytes */${size}` }).end();
+        return;
+      }
+      if (range) {
+        res.writeHead(206, { ...headers, "Content-Range": `bytes ${range.start}-${range.end}/${size}`, "Content-Length": range.end - range.start + 1 });
+      } else {
+        res.writeHead(200, { ...headers, "Content-Length": size });
+      }
+      if (req.method === "HEAD" || size === 0) {
+        res.end();
+        return;
+      }
+      // pipeline cierra el archivo si el cliente corta o si la lectura falla,
+      // y el error queda en esta petición: no tumba el servidor.
+      await pipeline(file.createReadStream({ ...(range ?? {}), autoClose: true }), res);
+    } catch {
+      if (!res.headersSent) res.writeHead(500).end();
+      else res.destroy();
+    } finally {
+      await file.close().catch(() => {});
     }
-    if (range) {
-      res.writeHead(206, { ...headers, "Content-Range": `bytes ${range.start}-${range.end}/${size}`, "Content-Length": range.end - range.start + 1 });
-    } else {
-      res.writeHead(200, { ...headers, "Content-Length": size });
-    }
-    if (req.method === "HEAD") {
-      res.end();
-      return;
-    }
-    createReadStream(path, range ?? undefined).pipe(res);
   };
 }
 
