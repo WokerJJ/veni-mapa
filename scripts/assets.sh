@@ -68,7 +68,7 @@ while read -r sha dest url extra; do
   if [[ ! -f "$file" ]] || ! echo "$sha  $file" | sha256sum -c --status; then
     echo "==> Descargando $dest"
     mkdir -p "$(dirname "$file")"
-    curl -fsSL --retry 3 --retry-delay 2 -o "$file.part" "$url" || fail "no se pudo descargar $url"
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o "$file.part" "$url" || fail "no se pudo descargar $url"
     mv "$file.part" "$file"
   fi
   if ! echo "$sha  $file" | sha256sum -c --status; then
