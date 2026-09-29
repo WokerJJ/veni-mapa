@@ -6,7 +6,7 @@ Pipeline reproducible que recorta Roldanillo (Valle del Cauca, Colombia) de Open
 
 ## Uso
 
-El único requisito es Docker. Todas las herramientas (make, pmtiles, font-maker, yq y jq) vienen en la imagen de [`docker/tools`](docker/tools/Dockerfile), la misma que usa la CI; Node se suma con el estilo (#5):
+El único requisito es Docker. Todas las herramientas (make, pmtiles, font-maker, yq, jq y Node 24) vienen en la imagen de [`docker/tools`](docker/tools/Dockerfile), la misma que usa la CI:
 
 ```bash
 docker compose run --rm tools make help      # lista los objetivos
@@ -17,9 +17,10 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | --- | --- |
 | `extract` | Resuelve la build diaria más reciente de Protomaps, corre `pmtiles extract --dry-run` (reporte en `build/extract-report.txt`) y extrae la región a `build/<región>.pmtiles`. Deja la procedencia (build, bbox, tamaño, SHA-256) en `build/build.json`. |
 | `assets` | Descarga las fuentes y los sprites de [`config/assets.lock`](config/assets.lock) (fijados por commit y verificados por SHA-256) y genera en `build/assets` los glyphs de [`config/fontstacks.yml`](config/fontstacks.yml) con [font-maker](https://github.com/maplibre/font-maker). |
-| `style` | Estilos MapLibre claro y oscuro, en español e inglés *(pendiente, #5)*. |
+| `style` | Genera `build/style/veni-{claro,oscuro}-{es,en}.json` con la marca Vení. `STYLE_BASE_URL` fija dónde se publican PMTiles, glyphs y sprites (por defecto `http://localhost:8080`). |
+| `check` | Verificación de tipos (TypeScript) y pruebas del generador de estilos. |
 | `serve` | Sirve la demo en local *(pendiente, #7)*. |
-| `all` | `extract`, `assets` y `style` *(completo cuando llegue `style`)*. |
+| `all` | `extract`, `assets` y `style`. |
 
 Para reproducir una versión exacta, fijá la build (funciona igual en bash y en PowerShell):
 
@@ -34,6 +35,27 @@ En Linux, el contenedor corre con tu usuario para que `build/` no quede de root:
 Si tu `build/` lo creó una versión anterior de la imagen (que corría como root) y ves `Permission denied`, borralo una vez con `docker compose run --rm --user 0:0 tools rm -rf build`.
 
 La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los tiles de la región (unos 1,6 MB hoy).
+
+## Estilos
+
+Cuatro estilos MapLibre generados con [`@protomaps/basemaps`](https://github.com/protomaps/basemaps) y la paleta de la marca ([`scripts/style/flavors.ts`](scripts/style/flavors.ts)):
+
+| | Claro | Oscuro |
+| --- | --- | --- |
+| Tierra | lila `#F3ECF6` | ciruela profunda `#1C0F26` |
+| Vías principales | mango | mango apagado |
+| Autopistas | arrebol | arrebol oscuro |
+| Etiquetas | ciruela `#2A1638` | lila |
+| Lugares | Bricolage Grotesque Bold | Bricolage Grotesque Bold |
+
+- Etiquetas en español (`name:es`) o inglés (`name:en`), con el nombre local como respaldo.
+- Todo texto llega a 4.5:1 de contraste contra su halo, y arrebol nunca es color de texto sobre fondo claro: lo verifican las pruebas (`make check`).
+- Las URLs del PMTiles, los glyphs y los sprites se escriben absolutas con `STYLE_BASE_URL`:
+  ```bash
+  docker compose run --rm tools make style STYLE_BASE_URL=https://tiles.veniroldanillo.co/v0.1.0
+  ```
+
+El generador es TypeScript que Node 24 ejecuta directamente, sin paso de compilación; `tsc` solo verifica tipos. Dentro del contenedor, `node_modules` vive en un volumen de Docker propio: así las dependencias de Linux (TypeScript 7 trae un binario nativo por plataforma) no chocan con las que instales en tu sistema para el editor.
 
 ## Tipografías y sprites
 
