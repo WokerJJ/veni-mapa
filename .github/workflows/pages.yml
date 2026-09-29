@@ -1,0 +1,82 @@
+name: Demo en GitHub Pages
+
+# La demo se construye y se despliega desde un artefacto de Actions: el PMTiles
+# y los recursos nunca entran en git.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un despliegue a la vez; uno nuevo no cancela el que está publicando.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Construir el sitio
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Usuario del runner para el contenedor
+        run: |
+          echo "HOST_UID=$(id -u)" >>"$GITHUB_ENV"
+          echo "HOST_GID=$(id -g)" >>"$GITHUB_ENV"
+          mkdir -p node_modules
+      - uses: actions/configure-pages@v6
+        id: pages
+      - uses: docker/setup-buildx-action@v4
+      - name: Imagen de herramientas
+        uses: docker/build-push-action@v7
+        with:
+          context: docker/tools
+          tags: veni-mapa-tools
+          load: true
+          cache-from: type=gha,scope=tools
+          cache-to: type=gha,scope=tools,mode=max
+      - name: Caché de recursos de terceros
+        uses: actions/cache@v6
+        with:
+          path: build/cache/assets
+          key: assets-${{ hashFiles('config/assets.lock') }}
+      # Los estilos apuntan a la URL de Pages (https://<usuario>.github.io/<repo>).
+      - name: make all
+        env:
+          STYLE_BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          docker compose run --rm tools make all \
+            STYLE_BASE_URL="$STYLE_BASE_URL" STYLE_VERSION="pages-${GITHUB_SHA::7}"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/site
+
+  deploy:
+    name: Publicar
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v5
+        id: deployment
+      # PMTiles necesita que el servidor responda a peticiones por rango.
+      - name: Pages sirve rangos HTTP
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          url="${PAGE_URL%/}/$(curl -fsSL "${PAGE_URL%/}/build.json" | jq -r .region).pmtiles"
+          for attempt in 1 2 3 4 5 6; do
+            status="$(curl -s -o /dev/null -r 0-15 -w '%{http_code}' "$url")"
+            [[ "$status" == 206 ]] && break
+            echo "Intento $attempt: $status"; sleep 10
+          done
+          echo "$url -> $status"
+          test "$status" = 206
+          curl -sSI -r 0-15 "$url" | grep -iE '^(HTTP|content-range|access-control-allow-origin|content-type)'

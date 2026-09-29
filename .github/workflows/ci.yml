@@ -163,6 +163,14 @@ jobs:
             '.sha256 == $sha and .bytes > 0 and (.protomaps_build | test("^[0-9]{8}$"))' build/build.json
           docker compose run --rm tools pmtiles show "build/$name.pmtiles"
           cat build/extract-report.txt
+      - name: make site
+        run: docker compose run --rm tools make site STYLE_BASE_URL=https://tiles.example.com/ci
+      - name: Verificación del sitio
+        run: |
+          for file in index.html demo.js demo.css vendor/maplibre-gl.mjs vendor/maplibre-gl-worker.mjs             vendor/maplibre-gl-shared.mjs vendor/pmtiles.js style/veni-claro-es.json build.json assets.json             licenses/maplibre-gl-BSD-3.txt licenses/pmtiles-BSD-3.txt "$(yq -r .name config/region.yml).pmtiles"; do
+            test -s "build/site/$file" || { echo "::error::falta build/site/$file"; exit 1; }
+          done
+          test -d "build/site/fonts/Figtree Regular" && test -s build/site/sprites/light.png
       - uses: actions/upload-artifact@v7
         with:
           name: extracto
