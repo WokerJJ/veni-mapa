@@ -40,7 +40,23 @@ describe("formato", () => {
   });
 
   it("título del PR", () => {
-    assert.equal(title(next), "chore(datos): actualizar extracto de OSM a 2026-10-03");
+    assert.equal(title(next), "deps(datos): actualizar extracto de OSM a 2026-10-03");
+  });
+
+  // release-please solo abre un PR de release si hay commits de un tipo visible
+  // en el CHANGELOG: con un tipo oculto (chore) los datos nuevos no se publican.
+  it("el tipo del título es visible para release-please y sube solo el parche", () => {
+    const config = JSON.parse(readFileSync("release-please-config.json", "utf8")) as {
+      "changelog-sections": { type: string; hidden?: boolean }[];
+    };
+    const match = /^([a-z]+)\(datos\)(!?): /.exec(title(next));
+    assert.ok(match, `título sin la forma tipo(datos): ${title(next)}`);
+    const [, type, breaking] = match;
+    const section = config["changelog-sections"].find((s) => s.type === type);
+    assert.ok(section, `el tipo ${type} no está en changelog-sections`);
+    assert.notEqual(section.hidden, true, `el tipo ${type} está oculto: no abriría una release`);
+    assert.notEqual(type, "feat", "una actualización de datos no es una funcionalidad");
+    assert.equal(breaking, "", "una actualización de datos no es un cambio incompatible");
   });
 
   it("compara con la release: build, tamaño, tiles y SHA-256", () => {
@@ -106,7 +122,7 @@ describe("CLI", () => {
 
   it("escribe data/build.json y el reporte, e imprime el título", async () => {
     const { stdout } = await cli(build, withPrevious);
-    assert.equal(stdout.trim(), "chore(datos): actualizar extracto de OSM a 2026-10-03");
+    assert.equal(stdout.trim(), "deps(datos): actualizar extracto de OSM a 2026-10-03");
     assert.deepEqual(JSON.parse(readFileSync(join(dir, "data.json"), "utf8")), {
       region: "roldanillo",
       protomaps_build: "20261003",
