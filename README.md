@@ -126,7 +126,36 @@ font-maker se fija en `FONT_MAKER_COMMIT` del [Dockerfile](docker/tools/Dockerfi
 
 Si existen los secrets de R2, la release también se publica en `https://tiles.veniroldanillo.co/vX.Y.Z/` y `/latest/`; hoy está preparado y desactivado (ver [docs/PUBLICACION.md](docs/PUBLICACION.md#cloudflare-r2-producción)).
 
-Para la app, `manifest.json` es la entrada: dice qué build de OpenStreetMap trae la versión y cómo verificar cada archivo. Numeración antes de 1.0: `feat` y `fix` suben el parche (0.1.0 → 0.1.1) y un cambio incompatible (`feat!` o `BREAKING CHANGE`) sube la menor. La versión menor se sube a mano al empezar un milestone nuevo (por ejemplo, 0.2.0 para las rutas, #29): se agrega al commit que se fusiona en `main` la línea `Release-As: 0.2.0`, y release-please propone esa versión.
+Para la app, `manifest.json` es la entrada: dice qué build de OpenStreetMap trae la versión y cómo verificar cada archivo.
+
+### Numeración de versiones
+
+Antes de 1.0:
+
+- Cualquier commit que aparece en el CHANGELOG (`feat`, `fix`, `perf`, `docs`, `ci`, `deps`) sube el **parche**: 0.1.0 → 0.1.1.
+- Un cambio incompatible (`feat!` o el pie `BREAKING CHANGE:`) sube la **menor**.
+- Los tipos ocultos (`chore`, `refactor`, `test`, `build`) no abren una release por sí solos.
+
+La versión menor corresponde a un milestone (0.2.0 = rutas, #29) y se fuerza **al cerrarlo**, no al empezarlo: `Release-As` fija la versión de todas las releases siguientes hasta que se publique, así que ponerla antes dejaría el milestone sin versiones 0.1.x intermedias. Para forzarla:
+
+1. En el último PR del milestone (o en uno corto `chore(release): versión 0.2.0`), escribir como **última línea del cuerpo del PR**, después del checklist y separada por una línea en blanco:
+
+   ```text
+   Release-As: 0.2.0
+   ```
+
+   Con squash merge el cuerpo del PR es el del commit, y release-please solo lee la línea si está en el bloque final del cuerpo; en cualquier otro lugar la ignora sin avisar.
+2. Al fusionarlo, el PR de release pasa a proponer 0.2.0; revisarlo antes de fusionarlo.
+
+Si la línea se olvidó o quedó mal ubicada, se edita el cuerpo del PR ya fusionado y se agrega al final un bloque que release-please sí lee:
+
+```text
+BEGIN_COMMIT_OVERRIDE
+<título del commit, igual que en main>
+
+Release-As: 0.2.0
+END_COMMIT_OVERRIDE
+```
 
 Requisito del repositorio: *Settings → Actions → General → Workflow permissions →* **Allow GitHub Actions to create and approve pull requests**. Sin eso release-please falla al abrir el PR de release.
 
