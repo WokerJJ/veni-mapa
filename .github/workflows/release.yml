@@ -152,3 +152,31 @@ jobs:
           name: release-${{ env.TAG }}
           path: dist
           retention-days: 7
+
+  # Cloudflare R2 (issue #9): preparado y desactivado. Sin los cuatro secrets
+  # R2_* el script avisa y termina bien; ver docs/PUBLICACION.md.
+  r2:
+    name: Publicación en R2
+    needs: [release-please, artefactos]
+    if: ${{ !cancelled() && needs.artefactos.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-${{ env.TAG }}
+          path: dist
+      # aws (CLI v2) viene instalado en los runners de Ubuntu.
+      - name: Subir a R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: scripts/r2-publish.sh dist
