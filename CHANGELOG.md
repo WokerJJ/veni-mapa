@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.1](https://github.com/WokerJJ/veni-mapa/compare/v0.1.0...v0.1.1) (2026-09-29)
+
+
+### Funcionalidades
+
+* **pipeline:** actualización mensual del extracto con PR y reporte ([#39](https://github.com/WokerJJ/veni-mapa/issues/39)) ([b277690](https://github.com/WokerJJ/veni-mapa/commit/b277690e7f072ab428e3662c42cdda4ba37c090a)), closes [#10](https://github.com/WokerJJ/veni-mapa/issues/10)
+* **release:** publicación en Cloudflare R2 preparada y desactivada ([#36](https://github.com/WokerJJ/veni-mapa/issues/36)) ([8eddaa3](https://github.com/WokerJJ/veni-mapa/commit/8eddaa393b26303282bf678ea7bcbdcb4eccb0d4)), closes [#9](https://github.com/WokerJJ/veni-mapa/issues/9)
+
+
+### Correcciones
+
+* **datos:** la actualización mensual abre una release de parche ([#50](https://github.com/WokerJJ/veni-mapa/issues/50)) ([2aa5160](https://github.com/WokerJJ/veni-mapa/commit/2aa5160da2337b1ad3ca9ceabbc65517ac09aa9a))
+* **release:** PR del bot con GitHub App opcional y sin el paso de dispatch que fallaba ([#43](https://github.com/WokerJJ/veni-mapa/issues/43)) ([a848880](https://github.com/WokerJJ/veni-mapa/commit/a848880ae4216144c489cbfcb6701dbba7befd69))
+
+
+### Documentación
+
+* bitácora del bloque 3 ([#41](https://github.com/WokerJJ/veni-mapa/issues/41)) ([7fcc925](https://github.com/WokerJJ/veni-mapa/commit/7fcc925dff103734ae965cb906af5ceb087ec3f6))
+* bitácora del bloque 4 ([#48](https://github.com/WokerJJ/veni-mapa/issues/48)) ([ff4d7f5](https://github.com/WokerJJ/veni-mapa/commit/ff4d7f51dd6bfee1eb746e06591099318e332f05))
+* bitácora del bloque 5 ([#52](https://github.com/WokerJJ/veni-mapa/issues/52)) ([8016f9c](https://github.com/WokerJJ/veni-mapa/commit/8016f9ca4a7f7b9fe736802748c9cf9e57b2d3aa))
+* README completo y guía para contribuir a OpenStreetMap ([#51](https://github.com/WokerJJ/veni-mapa/issues/51)) ([7cec062](https://github.com/WokerJJ/veni-mapa/commit/7cec0629c4a323e76a1845038d71f80c3d5be568))
+
 ## 0.1.0 (2026-09-29)
 
 
