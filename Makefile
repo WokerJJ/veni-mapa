@@ -14,8 +14,8 @@ BUILD_DATE ?=
 
 # Los valores de la región salen de config/region.yml. make regenera
 # build/region.mk cuando cambia el YAML y lo vuelve a leer antes de seguir.
-# help y clean no lo necesitan: así funcionan aunque el YAML esté roto.
-NO_REGION_GOALS := help clean
+# help, clean y assets no lo necesitan: funcionan aunque el YAML esté roto.
+NO_REGION_GOALS := help clean assets
 ifneq ($(filter-out $(NO_REGION_GOALS),$(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))),)
 include $(BUILD_DIR)/region.mk
 endif
@@ -50,5 +50,5 @@ style: ## Estilos MapLibre claro/oscuro ES/EN (issue #5)
 serve: ## Sirve la demo en local (issue #7)
 	@echo "make serve: pendiente, llega con el issue #7" >&2; exit 1
 
-clean: ## Borra build/
+clean: ## Borra build/, incluido el caché de descargas de make assets
 	rm -rf $(BUILD_DIR)
