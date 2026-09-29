@@ -5,6 +5,13 @@
 # "Actualizar recursos de terceros" en el README.
 ARG FONT_MAKER_COMMIT=714ccaea67d384717890a3c2c27143dfdd4189b7
 
+# Una sola Alpine para las dos etapas: font-maker se compila y corre contra la
+# misma libc y la misma FreeType. Declaradas antes del primer FROM, estas
+# variables valen en todos los FROM. Para actualizarlas, ver "Actualizar la
+# imagen de herramientas" en el README.
+ARG ALPINE_VERSION=3.22
+ARG NODE_MAJOR=24
+
 # go-pmtiles publica un binario estático; se copia a una imagen con shell.
 FROM protomaps/go-pmtiles:v1.31.2 AS pmtiles
 
@@ -12,7 +19,7 @@ FROM protomaps/go-pmtiles:v1.31.2 AS pmtiles
 # varias fuentes en un solo fontstack. No publica binarios: se compila aquí,
 # sobre la misma versión de Alpine que la imagen final, para enlazar contra la
 # misma libc y la misma FreeType.
-FROM alpine:3.22 AS font-maker
+FROM alpine:${ALPINE_VERSION} AS font-maker
 ARG FONT_MAKER_COMMIT
 RUN apk add --no-cache boost-dev build-base clang cmake freetype-dev git
 RUN git clone https://github.com/maplibre/font-maker.git /src \
@@ -21,9 +28,8 @@ RUN git clone https://github.com/maplibre/font-maker.git /src \
     && cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /src/build --parallel
 
-# Node 24 corre el generador de estilos (scripts/style/*.ts) sin compilar.
-# Misma Alpine que la etapa de font-maker: mismas libc y FreeType.
-FROM node:24-alpine3.22
+# Node corre el generador de estilos (scripts/style/*.ts) sin compilar.
+FROM node:${NODE_MAJOR}-alpine${ALPINE_VERSION}
 
 # Queda en la imagen para que assets.json registre con qué se generaron los glyphs.
 ARG FONT_MAKER_COMMIT

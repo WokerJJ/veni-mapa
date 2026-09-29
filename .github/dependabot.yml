@@ -39,10 +39,10 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     ignore:
-      # font-maker se compila sobre alpine:X.Y y corre sobre node:24-alpineX.Y:
-      # las dos Alpine tienen que ser la misma (libc y FreeType). Dependabot sube
-      # cada FROM por separado, así que estas dos se actualizan juntas a mano
-      # (README, "Actualizar la imagen de herramientas"). go-pmtiles sigue con
-      # Dependabot.
+      # font-maker se compila sobre alpine y corre sobre node:*-alpine: las dos
+      # usan la misma ALPINE_VERSION del Dockerfile y se actualizan juntas a mano
+      # (README, "Actualizar la imagen de herramientas"). Con los FROM por
+      # variable Dependabot ya no las propone; estas reglas quedan como red de
+      # seguridad. go-pmtiles sigue con Dependabot.
       - dependency-name: "alpine"
       - dependency-name: "node"

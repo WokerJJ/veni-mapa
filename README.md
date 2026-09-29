@@ -100,10 +100,12 @@ Un hosting estático no puede combinar fuentes al vuelo, así que font-maker met
 
 ### Actualizar la imagen de herramientas
 
-La imagen tiene dos etapas que deben usar la **misma Alpine**: font-maker se compila sobre `alpine:X.Y` y corre sobre `node:24-alpineX.Y`, y un binario compilado contra otra libc o FreeType puede fallar. Por eso Dependabot no propone `alpine` ni `node` (sí `go-pmtiles`), y la CI falla si las dos etapas no coinciden. Para actualizarlas:
+font-maker se compila sobre `alpine` y corre sobre `node:*-alpine`: las dos etapas tienen que usar la **misma Alpine** (libc y FreeType). Por eso el [Dockerfile](docker/tools/Dockerfile) declara una sola vez `ALPINE_VERSION` y `NODE_MAJOR` y los dos `FROM` los usan: no pueden quedar desalineados. Dependabot no los propone (sí `go-pmtiles`), así que se actualizan a mano:
 
-1. Cambiar las dos líneas `FROM` de [`docker/tools/Dockerfile`](docker/tools/Dockerfile) a la misma versión de Alpine (y, si cambia la mayor de Node, `@types/node` y la versión de Node de la CI).
+1. Cambiar `ALPINE_VERSION` (y `NODE_MAJOR` si cambia la mayor de Node; en ese caso también `@types/node`, la regla `ignore` de `@types/node` en [`dependabot.yml`](.github/dependabot.yml) y la versión de Node de la CI).
 2. `docker compose build tools` y correr `make all`, `make check`, `make verify` y las pruebas.
+
+Cuándo revisarlo: la imagen oficial de Node solo publica parches sobre las Alpine vigentes. Cuando sale una Alpine nueva (en mayo y en diciembre), la etiqueta `node:<mayor>-alpine<vieja>` deja de recibir parches de Node.
 
 ### Actualizar recursos de terceros
 
