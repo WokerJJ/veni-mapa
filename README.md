@@ -159,7 +159,20 @@ END_COMMIT_OVERRIDE
 
 Requisito del repositorio: *Settings → Actions → General → Workflow permissions →* **Allow GitHub Actions to create and approve pull requests**. Sin eso release-please falla al abrir el PR de release.
 
-Los PR y ramas que crea `GITHUB_TOKEN` no disparan otros workflows, así que `release.yml` lanza la CI (`workflow_dispatch`) sobre la rama del PR de release para que tenga el check `ci-ok`. Si la subida de artefactos falla, *Actions → Release → Run workflow* con el tag los vuelve a construir y adjuntar. Si la release ya tiene `manifest.json`, se reconstruye con la misma build de Protomaps y falla si el extracto no da el mismo SHA-256: una versión publicada no cambia de datos.
+### PR del bot y la CI
+
+Los PR que abre `GITHUB_TOKEN` (el de release y el de la actualización mensual) no corren la CI solos: sus workflows quedan en *action_required*. Sin el check `ci-ok`, la protección de `main` no deja fusionarlos. Hay dos formas de resolverlo:
+
+- **Sin configurar nada:** en el PR, *Checks* (o *Actions*, en el run pendiente) → **Approve and run**. Después de aprobarlos corren como cualquier PR y `ci-ok` aparece.
+- **Con una GitHub App (recomendado):** release-please y la actualización mensual abren el PR con la identidad de la App y la CI corre sola.
+  1. Crear una GitHub App en la cuenta (*Settings → Developer settings → GitHub Apps*), sin webhook, con permisos de repositorio **Contents: read and write**, **Pull requests: read and write** e **Issues: read and write**, e instalarla solo en este repositorio.
+  2. Generar una clave privada de la App.
+  3. En el repositorio: variable `RELEASE_APP_CLIENT_ID` con el *Client ID* de la App (página de la App, *General*) y secret `RELEASE_APP_PRIVATE_KEY` con la clave privada (*Settings → Secrets and variables → Actions*).
+  4. Comprobar: *Actions → Actualizar extracto → Run workflow* con una `build_date` distinta de la de `data/build.json`; la CI del PR que se abra tiene que arrancar sin *Approve and run*. Si era solo de prueba, cerrar ese PR.
+
+  Con la App, el PR de release, el tag, la release y el commit de datos quedan a nombre de la App (`<nombre>[bot]`). Mientras la variable no exista, los workflows usan `GITHUB_TOKEN` y siguen funcionando; solo falta aprobar la CI a mano. Si existe la variable pero falta el secret, el workflow falla con un error visible en vez de caer en `GITHUB_TOKEN`.
+
+Si la subida de artefactos falla, *Actions → Release → Run workflow* con el tag los vuelve a construir y adjuntar. Si la release ya tiene `manifest.json`, se reconstruye con la misma build de Protomaps y falla si el extracto no da el mismo SHA-256: una versión publicada no cambia de datos.
 
 ## Actualización mensual
 
@@ -167,7 +180,7 @@ Los PR y ramas que crea `GITHUB_TOKEN` no disparan otros workflows, así que `re
 
 `data/build.json` es la build aprobada: al publicar una release, `release.yml` extrae esa misma build y falla si el PMTiles no da ese SHA-256. Así una release trae exactamente los datos revisados en el PR. Los tiles por zoom los cuenta [`scripts/tile-stats.ts`](scripts/tile-stats.ts) leyendo los directorios del PMTiles (go-pmtiles no los reporta).
 
-Como el de release, el PR lo abre `GITHUB_TOKEN`: sus workflows esperan *Approve and run* antes de correr (issue #37). La rama `chore/actualizar-extracto` es del workflow: cada corrida la rehace desde `main` y pisa lo que se haya empujado a mano.
+El PR lo abre la GitHub App si está configurada; si no, `GITHUB_TOKEN`, y sus workflows esperan *Approve and run* (ver [PR del bot y la CI](#pr-del-bot-y-la-ci)). La rama `chore/actualizar-extracto` es del workflow: cada corrida la rehace desde `main` y pisa lo que se haya empujado a mano.
 
 El PR es `chore(datos)`, así que por sí solo no crea una release: la build aprobada se usa en la siguiente `feat` o `fix`. Las builds diarias de Protomaps no se guardan para siempre, y la CI de cada PR avisa (*data/build.json sigue siendo reproducible*) si la build de `data/build.json` ya no se puede extraer o ya no da su SHA-256, por ejemplo porque el PR cambia la región o go-pmtiles. Si una release llega a fallar por eso, *Actions → Release → Run workflow* con el tag y `build_date` la construye con otra build.
 
