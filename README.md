@@ -6,7 +6,7 @@ Pipeline reproducible que recorta Roldanillo (Valle del Cauca, Colombia) de Open
 
 ## Uso
 
-El único requisito es Docker. Todas las herramientas (make, pmtiles, yq, jq, Node) vienen en la imagen de [`docker/tools`](docker/tools/Dockerfile), la misma que usa la CI:
+El único requisito es Docker. Todas las herramientas (make, pmtiles, font-maker, yq y jq) vienen en la imagen de [`docker/tools`](docker/tools/Dockerfile), la misma que usa la CI; Node se suma con el estilo (#5):
 
 ```bash
 docker compose run --rm tools make help      # lista los objetivos
@@ -17,9 +17,9 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | --- | --- |
 | `extract` | Resuelve la build diaria más reciente de Protomaps, corre `pmtiles extract --dry-run` (reporte en `build/extract-report.txt`) y extrae la región a `build/<región>.pmtiles`. Deja la procedencia (build, bbox, tamaño, SHA-256) en `build/build.json`. |
 | `assets` | Descarga las fuentes y los sprites de [`config/assets.lock`](config/assets.lock) (fijados por commit y verificados por SHA-256) y genera en `build/assets` los glyphs de [`config/fontstacks.yml`](config/fontstacks.yml) con [font-maker](https://github.com/maplibre/font-maker). |
-| `style` | Estilos MapLibre claro y oscuro, en español e inglés. |
-| `serve` | Sirve la demo en local. |
-| `all` | `extract`, `assets` y `style`. |
+| `style` | Estilos MapLibre claro y oscuro, en español e inglés *(pendiente, #5)*. |
+| `serve` | Sirve la demo en local *(pendiente, #7)*. |
+| `all` | `extract`, `assets` y `style` *(completo cuando llegue `style`)*. |
 
 Para reproducir una versión exacta, fijá la build (funciona igual en bash y en PowerShell):
 
