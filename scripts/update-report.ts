@@ -56,8 +56,11 @@ function percent(before: number, after: number): string {
   return p > 0 ? ` (+${text} %)` : p < 0 ? ` (−${text} %)` : " (0 %)";
 }
 
+// deps y no chore: release-please solo abre un PR de release con tipos visibles
+// en el CHANGELOG (release-please-config.json), y la app consume releases. Al
+// fusionar la actualización sale una versión de parche con los datos nuevos.
 export function title(next: Snapshot): string {
-  return `chore(datos): actualizar extracto de OSM a ${isoDate(next.protomaps_build)}`;
+  return `deps(datos): actualizar extracto de OSM a ${isoDate(next.protomaps_build)}`;
 }
 
 export function report(next: Snapshot, previous: Previous | null): string {

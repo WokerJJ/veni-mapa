@@ -187,7 +187,7 @@ Si la subida de artefactos falla, *Actions → Release → Run workflow* con el 
 
 ## Actualización mensual
 
-[`update.yml`](.github/workflows/update.yml) regenera el extracto el día 3 de cada mes, o a mano con *Actions → Actualizar extracto → Run workflow* (entrada opcional `build_date`, AAAAMMDD). Lo verifica con `make verify`, lo compara con la última release y, si cambió, abre o actualiza el PR `chore(datos): actualizar extracto de OSM a AAAA-MM-DD` en la rama `chore/actualizar-extracto`. El PR solo cambia [`data/build.json`](data/build.json) (build de Protomaps, tamaño, SHA-256 y tiles por zoom) y trae en el cuerpo el reporte: build, tamaño, tiles totales y por zoom, antes y después.
+[`update.yml`](.github/workflows/update.yml) regenera el extracto el día 3 de cada mes, o a mano con *Actions → Actualizar extracto → Run workflow* (entrada opcional `build_date`, AAAAMMDD). Lo verifica con `make verify`, lo compara con la última release y, si cambió, abre o actualiza el PR `deps(datos): actualizar extracto de OSM a AAAA-MM-DD` en la rama `chore/actualizar-extracto`. El PR solo cambia [`data/build.json`](data/build.json) (build de Protomaps, tamaño, SHA-256 y tiles por zoom) y trae en el cuerpo el reporte: build, tamaño, tiles totales y por zoom, antes y después.
 
 `data/build.json` es la build aprobada: al publicar una release, `release.yml` extrae esa misma build y falla si el PMTiles no da ese SHA-256. Así una release trae exactamente los datos revisados en el PR. Los tiles por zoom los cuenta [`scripts/tile-stats.ts`](scripts/tile-stats.ts) leyendo los directorios del PMTiles (go-pmtiles no los reporta).
 
@@ -195,7 +195,7 @@ El PR lo abre la GitHub App si está configurada; si no, `GITHUB_TOKEN`, y sus w
 
 Antes de regenerar, la corrida comprueba que la etiqueta de Node de la imagen siga recibiendo parches (ver [Actualizar la imagen de herramientas](#actualizar-la-imagen-de-herramientas)); si no, deja un aviso sin frenar la actualización.
 
-El PR es `chore(datos)`, así que por sí solo no crea una release: la build aprobada se usa en la siguiente `feat` o `fix`. Las builds diarias de Protomaps no se guardan para siempre, y la CI de cada PR avisa (*data/build.json sigue siendo reproducible*) si la build de `data/build.json` ya no se puede extraer o ya no da su SHA-256, por ejemplo porque el PR cambia la región o go-pmtiles. Si una release llega a fallar por eso, *Actions → Release → Run workflow* con el tag y `build_date` la construye con otra build.
+El PR es `deps(datos)`, un tipo visible en el CHANGELOG (sección *Dependencias*): al fusionarlo, release-please abre o actualiza el PR de release con una versión de parche, y esa release publica la build aprobada. Con un tipo oculto como `chore` no habría release hasta el siguiente commit visible; una prueba de `tests/node/update-report.test.ts` lo impide. Las builds diarias de Protomaps no se guardan para siempre, y la CI de cada PR avisa (*data/build.json sigue siendo reproducible*) si la build de `data/build.json` ya no se puede extraer o ya no da su SHA-256, por ejemplo porque el PR cambia la región o go-pmtiles. Si una release llega a fallar por eso, *Actions → Release → Run workflow* con el tag y `build_date` la construye con otra build.
 
 ## Región
 
