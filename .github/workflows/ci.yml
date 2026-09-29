@@ -184,6 +184,28 @@ jobs:
       # Estilos válidos según MapLibre y extracto con tipo, caja, zoom, capas y tamaño.
       - name: make verify
         run: docker compose run --rm tools make verify
+      # Artefactos de lo que se verificó, antes de rearmar el sitio para el render.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: extracto
+          path: |
+            build/*.pmtiles
+            build/extract-report.txt
+            build/build.json
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: estilos
+          path: build/style
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: recursos
+          path: build/assets
+          retention-days: 7
       # Render en Chromium sin interfaz (en el runner: Playwright no corre en
       # Alpine). El sitio se arma con la base por defecto, la misma URL en la que
       # Playwright lo sirve.
@@ -196,7 +218,7 @@ jobs:
       - name: Dependencias y Chromium en el runner
         run: |
           npm ci --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps --only-shell chromium
       - name: Render de la demo
         run: npm run test:render
       - uses: actions/upload-artifact@v7
@@ -206,24 +228,6 @@ jobs:
           path: |
             playwright-report
             test-results
-          retention-days: 7
-      - uses: actions/upload-artifact@v7
-        with:
-          name: extracto
-          path: |
-            build/*.pmtiles
-            build/extract-report.txt
-            build/build.json
-          retention-days: 7
-      - uses: actions/upload-artifact@v7
-        with:
-          name: estilos
-          path: build/style
-          retention-days: 7
-      - uses: actions/upload-artifact@v7
-        with:
-          name: recursos
-          path: build/assets
           retention-days: 7
 
   # Único check obligatorio en la protección de main: agrega el resultado de

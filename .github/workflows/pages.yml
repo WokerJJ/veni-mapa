@@ -64,6 +64,9 @@ jobs:
           test -n "$STYLE_BASE_URL"
           docker compose run --rm tools make all \
             STYLE_BASE_URL="$STYLE_BASE_URL" STYLE_VERSION="pages-${GITHUB_SHA::7}"
+      # Lo que se publica pasa por la misma verificación que en CI.
+      - name: make verify
+        run: docker compose run --rm tools make verify
       - uses: actions/upload-pages-artifact@v5
         with:
           path: build/site
