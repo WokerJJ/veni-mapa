@@ -98,6 +98,13 @@ El estilo usa las tipografías de la marca Vení, servidas desde el mismo lugar 
 
 Un hosting estático no puede combinar fuentes al vuelo, así que font-maker mete el respaldo de Noto Sans dentro de cada fontstack: lo que Figtree o Bricolage no cubren (griego, cirílico, Latin extendido) sale de Noto. Los sprites son los de [protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets) (v4, claro y oscuro). Licencias en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+### Actualizar la imagen de herramientas
+
+La imagen tiene dos etapas que deben usar la **misma Alpine**: font-maker se compila sobre `alpine:X.Y` y corre sobre `node:24-alpineX.Y`, y un binario compilado contra otra libc o FreeType puede fallar. Por eso Dependabot no propone `alpine` ni `node` (sí `go-pmtiles`), y la CI falla si las dos etapas no coinciden. Para actualizarlas:
+
+1. Cambiar las dos líneas `FROM` de [`docker/tools/Dockerfile`](docker/tools/Dockerfile) a la misma versión de Alpine (y, si cambia la mayor de Node, `@types/node` y la versión de Node de la CI).
+2. `docker compose build tools` y correr `make all`, `make check`, `make verify` y las pruebas.
+
 ### Actualizar recursos de terceros
 
 Las fuentes y los sprites están fijados en [`config/assets.lock`](config/assets.lock) por commit y SHA-256. Para subir de versión uno de ellos:

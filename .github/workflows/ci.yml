@@ -25,6 +25,17 @@ jobs:
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
+      # font-maker se compila sobre una Alpine y corre sobre otra: tienen que ser
+      # la misma versión (libc y FreeType).
+      - name: Imagen alineada
+        run: |
+          builder="$(sed -nE 's/^FROM alpine:([0-9.]+) AS font-maker$/\1/p' docker/tools/Dockerfile)"
+          runtime="$(sed -nE 's/^FROM node:[0-9]+-alpine([0-9.]+)$/\1/p' docker/tools/Dockerfile)"
+          echo "font-maker: alpine $builder · imagen final: alpine $runtime"
+          if [[ -z "$builder" || "$builder" != "$runtime" ]]; then
+            echo "::error file=docker/tools/Dockerfile::La etapa de font-maker (alpine:$builder) y la imagen final (node:*-alpine$runtime) tienen que usar la misma Alpine"
+            exit 1
+          fi
       # En Windows git no registra permisos: un script nuevo puede llegar sin
       # bit de ejecución y fallar solo en Linux.
       - name: Scripts ejecutables

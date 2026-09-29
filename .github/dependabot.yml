@@ -25,6 +25,11 @@ updates:
     groups:
       tipos:
         patterns: ["@types/*", "typescript"]
+    ignore:
+      # Los tipos de Node siguen al Node que corre el pipeline (24, en la imagen
+      # y en CI): una mayor nueva se sube a mano junto con Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /docker/tools
     schedule:
@@ -33,3 +38,11 @@ updates:
     labels: ["type:chore", "area:deps"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # font-maker se compila sobre alpine:X.Y y corre sobre node:24-alpineX.Y:
+      # las dos Alpine tienen que ser la misma (libc y FreeType). Dependabot sube
+      # cada FROM por separado, así que estas dos se actualizan juntas a mano
+      # (README, "Actualizar la imagen de herramientas"). go-pmtiles sigue con
+      # Dependabot.
+      - dependency-name: "alpine"
+      - dependency-name: "node"
