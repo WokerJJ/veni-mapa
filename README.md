@@ -6,7 +6,7 @@ Pipeline reproducible que recorta Roldanillo (Valle del Cauca, Colombia) de Open
 
 ## Uso
 
-El único requisito es Docker. Todas las herramientas (make, pmtiles, font-maker, yq y jq) vienen en la imagen de [`docker/tools`](docker/tools/Dockerfile), la misma que usa la CI; Node se suma con el estilo (#5):
+El único requisito es Docker. Todas las herramientas (make, pmtiles, font-maker, yq, jq y Node 24) vienen en la imagen de [`docker/tools`](docker/tools/Dockerfile), la misma que usa la CI:
 
 ```bash
 docker compose run --rm tools make help      # lista los objetivos
@@ -17,9 +17,10 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | --- | --- |
 | `extract` | Resuelve la build diaria más reciente de Protomaps, corre `pmtiles extract --dry-run` (reporte en `build/extract-report.txt`) y extrae la región a `build/<región>.pmtiles`. Deja la procedencia (build, bbox, tamaño, SHA-256) en `build/build.json`. |
 | `assets` | Descarga las fuentes y los sprites de [`config/assets.lock`](config/assets.lock) (fijados por commit y verificados por SHA-256) y genera en `build/assets` los glyphs de [`config/fontstacks.yml`](config/fontstacks.yml) con [font-maker](https://github.com/maplibre/font-maker). |
-| `style` | Estilos MapLibre claro y oscuro, en español e inglés *(pendiente, #5)*. |
+| `style` | Genera `build/style/veni-{claro,oscuro}-{es,en}.json` con la marca Vení. `STYLE_BASE_URL` fija dónde se publican PMTiles, glyphs y sprites (por defecto `http://localhost:8080`). |
+| `check` | Verificación de tipos (TypeScript) y pruebas del generador de estilos. |
 | `serve` | Sirve la demo en local *(pendiente, #7)*. |
-| `all` | `extract`, `assets` y `style` *(completo cuando llegue `style`)*. |
+| `all` | `extract`, `assets` y `style`. |
 
 Para reproducir una versión exacta, fijá la build (funciona igual en bash y en PowerShell):
 
@@ -34,6 +35,43 @@ En Linux, el contenedor corre con tu usuario para que `build/` no quede de root:
 Si tu `build/` lo creó una versión anterior de la imagen (que corría como root) y ves `Permission denied`, borralo una vez con `docker compose run --rm --user 0:0 tools rm -rf build`.
 
 La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los tiles de la región (unos 1,6 MB hoy).
+
+## Estilos
+
+Cuatro estilos MapLibre generados con [`@protomaps/basemaps`](https://github.com/protomaps/basemaps) y la paleta de la marca ([`scripts/style/flavors.ts`](scripts/style/flavors.ts)):
+
+| | Claro | Oscuro |
+| --- | --- | --- |
+| Tierra | lila `#F3ECF6` | ciruela profunda `#1C0F26` |
+| Vías principales | tinte de mango | mango mezclado con ciruela |
+| Autopistas | tinte de arrebol | arrebol mezclado con ciruela |
+| Etiquetas | ciruela `#2A1638` | lila |
+| Lugares (municipio, barrios, departamentos, países) | Bricolage Grotesque Bold | Bricolage Grotesque Bold |
+
+- Los tintes se calculan desde los tokens de la marca (`mix()`), así un cambio de marca se propaga.
+- Etiquetas en español (`name:es`) o inglés (`name:en`), con el nombre local como respaldo.
+- Toda capa con texto llega a 4.5:1 de contraste contra su halo, medido sobre el estilo generado; arrebol nunca es color de texto sobre fondo claro. Lo verifican las pruebas (`make check`).
+
+### Dónde se publican
+
+El estilo escribe URLs absolutas a partir de `STYLE_BASE_URL` y espera este árbol bajo esa base:
+
+```text
+<STYLE_BASE_URL>/
+├── <región>.pmtiles          build/roldanillo.pmtiles
+├── fonts/<fontstack>/…pbf    build/assets/fonts/
+└── sprites/{light,dark}…     build/assets/sprites/
+```
+
+```bash
+docker compose run --rm tools make style STYLE_BASE_URL=https://tiles.veniroldanillo.co/v0.1.0 STYLE_VERSION=0.1.0
+```
+
+`STYLE_BASE_URL` debe ser `http(s)`, sin usuario, contraseña, query ni fragmento (por defecto `http://localhost:8080`); `STYLE_VERSION` queda en los metadatos (por defecto `dev`), junto con la base y la build de Protomaps del extracto.
+
+### Node dentro del contenedor
+
+El generador es TypeScript que Node 24 ejecuta directamente, sin paso de compilación; `tsc` solo verifica tipos. `make` instala las dependencias con `npm ci`, que respeta el `package-lock.json` exacto. Dentro del contenedor, `node_modules` vive en un volumen de Docker propio: TypeScript 7 trae un binario nativo por plataforma y las dependencias de Linux no pueden compartirse con las que instales en tu sistema para el editor. En Linux, creá la carpeta antes de la primera corrida (`mkdir -p node_modules`) para que el punto de montaje no quede de root.
 
 ## Tipografías y sprites
 

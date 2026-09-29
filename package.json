@@ -1,0 +1,23 @@
+{
+  "name": "veni-mapa",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Estilos MapLibre de Vení para el mapa de Roldanillo",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "style": "node scripts/style/build.ts",
+    "typecheck": "tsc -p .",
+    "test": "node --test \"tests/style/*.test.ts\""
+  },
+  "devDependencies": {
+    "@maplibre/maplibre-gl-style-spec": "26.4.4",
+    "@protomaps/basemaps": "5.7.2",
+    "@types/geojson": "7946.0.16",
+    "@types/node": "24.19.0",
+    "typescript": "7.0.2"
+  }
+}

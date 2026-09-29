@@ -6,11 +6,12 @@
 # de cada fontstack, porque un hosting estático (Pages, R2) no puede combinar
 # fuentes al vuelo como haría un servidor de glyphs.
 
-# Etiquetas generales (calles, lugares pequeños, puntos de interés).
+# Etiquetas generales: calles, puntos de interés y direcciones.
 Figtree Regular: [fonts/Figtree-Regular.ttf, fonts/NotoSans-Regular.ttf]
-# Etiquetas con más peso (vías principales, barrios).
+# Números de vías en sus escudos (y lo que basemaps pide en "Medium").
 Figtree SemiBold: [fonts/Figtree-SemiBold.ttf, fonts/NotoSans-SemiBold.ttf]
-# Agua (ríos, quebradas, lagos).
+# Agua: ríos, quebradas, lagos.
 Figtree Italic: [fonts/Figtree-Italic.ttf, fonts/NotoSans-Italic.ttf]
-# Lugares destacados (municipio, veredas, países): tipografía de títulos de la marca.
+# Lugares: municipio, barrios y veredas, departamentos y países (tipografía de
+# títulos de la marca; ver PLACE_LAYERS en scripts/style/style.ts).
 Bricolage Grotesque Bold: [fonts/BricolageGrotesque-Bold.ttf, fonts/NotoSans-Bold.ttf]

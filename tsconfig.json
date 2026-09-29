@@ -1,0 +1,17 @@
+{
+  // Node 24 ejecuta TypeScript quitando los tipos, sin compilar: tsc solo
+  // verifica. Por eso solo se permite sintaxis que se puede borrar sin más
+  // (erasableSyntaxOnly) y las importaciones llevan la extensión .ts.
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["node", "geojson"]
+  },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts"]
+}

@@ -9,6 +9,13 @@ services:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - .:/work
+      - node_modules:/work/node_modules
     environment:
       # Fecha de la build de Protomaps (AAAAMMDD). Vacía = la más reciente.
       BUILD_DATE: ${BUILD_DATE:-}
+      # El uid del host no tiene carpeta personal en la imagen.
+      npm_config_cache: /tmp/.npm
+      npm_config_update_notifier: "false"
+
+volumes:
+  node_modules:
