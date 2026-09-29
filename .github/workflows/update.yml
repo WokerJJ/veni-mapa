@@ -24,6 +24,8 @@ concurrency:
 
 env:
   BRANCH: chore/actualizar-extracto
+  # GitHub App opcional para abrir el PR con otra identidad (ver release.yml).
+  RELEASE_APP_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
 
 jobs:
   update:
@@ -108,21 +110,45 @@ jobs:
             --build build/build.json --pmtiles "build/$REGION.pmtiles" \
             --data data/build.json --report build/update-report.md $PREVIOUS_ARGS >build/title.txt
           cat build/update-report.md >>"$GITHUB_STEP_SUMMARY"
+      # Con la GitHub App (ver release.yml) el PR se abre con otra identidad y la
+      # CI corre sola; con GITHUB_TOKEN sus workflows esperan "Approve and run".
+      - name: Token de la GitHub App
+        id: app
+        if: env.RELEASE_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ env.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - name: PR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
         run: |
           set -euo pipefail
-          if git diff --quiet -- data/build.json; then
+          # git sin hooks ni fsmonitor: el árbol pasó por contenedores que
+          # procesaron datos de la red, y este paso tiene el token.
+          safe_git() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+          if safe_git diff --quiet -- data/build.json; then
             echo "::notice title=Sin cambios::data/build.json no cambió: el extracto es el mismo."
             exit 0
           fi
           title="$(cat build/title.txt)"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -C "$BRANCH"
-          git add data/build.json
-          git commit -m "$title"
+          # El commit lo firma quien empuja: la App si está configurada, si no
+          # github-actions[bot].
+          if [[ -n "$APP_SLUG" ]]; then
+            bot="${APP_SLUG}[bot]"
+            email="$(gh api "users/$bot" --jq .id)+$bot@users.noreply.github.com"
+          else
+            bot="github-actions[bot]"
+            email="41898282+github-actions[bot]@users.noreply.github.com"
+          fi
+          safe_git config user.name "$bot"
+          safe_git config user.email "$email"
+          safe_git switch -C "$BRANCH"
+          safe_git add data/build.json
+          safe_git commit -m "$title"
           # La rama es del workflow: cada corrida la rehace desde main.
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           echo "::add-mask::$auth"
