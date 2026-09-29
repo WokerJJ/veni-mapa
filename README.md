@@ -41,7 +41,7 @@ flowchart LR
 
 ## Uso
 
-El único requisito es Docker. Todas las herramientas (make, pmtiles, font-maker, yq, jq y Node 24) vienen en la imagen de [`docker/tools`](docker/tools/Dockerfile), la misma que usa la CI:
+Para generar el mapa solo hace falta Docker. Todas las herramientas (make, pmtiles, font-maker, yq, jq y Node 24) vienen en la imagen de [`docker/tools`](docker/tools/Dockerfile), la misma que usa la CI:
 
 ```bash
 docker compose run --rm tools make help      # lista los objetivos
@@ -96,22 +96,31 @@ La app [veni-roldanillo](https://github.com/WokerJJ/veni-roldanillo) no copia es
 El tema y el idioma los controla la app, no el mapa: cambia `claro`/`oscuro` y `es`/`en` en el nombre del archivo y llama a `map.setStyle(url, { diff: false })`. El mapa no trae botones propios.
 
 ```ts
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css"; // controles, incluida la atribución
 import { Protocol } from "pmtiles";
 
 // Los estilos piden los tiles como pmtiles://…: MapLibre los lee por rangos HTTP.
 const protocol = new Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 
-const style = await (await fetch(import.meta.env.VITE_MAP_STYLE_URL)).json();
+const style = (await (await fetch(import.meta.env.VITE_MAP_STYLE_URL)).json()) as maplibregl.StyleSpecification;
+// Metadatos de Vení en el estilo: la caja de la región (config/region.yml).
+const metadata = style.metadata as { "veni:bounds": maplibregl.LngLatBoundsLike };
+
 const map = new maplibregl.Map({
   container: "mapa",
-  style, // trae center y zoom de Roldanillo
-  maxBounds: style.metadata["veni:bounds"], // la cámara no sale de la región
+  style,
+  // Cámara explícita: sin ella el mapa arranca en 0,0 con zoom 0, salta a
+  // Roldanillo al cargar el estilo y puede quedar vacío hasta moverlo.
+  center: style.center as maplibregl.LngLatLike,
+  zoom: style.zoom,
+  // La cámara no sale de la región del extracto.
+  maxBounds: metadata["veni:bounds"],
 });
 ```
 
-- **Atribución:** la fuente del estilo ya trae "© colaboradores de OpenStreetMap"; no ocultes el control de atribución de MapLibre (en móvil, `compact: true`).
+- **Atribución:** la fuente del estilo ya trae la atribución a OpenStreetMap en su idioma ("© colaboradores de OpenStreetMap" o "© OpenStreetMap contributors"); no ocultes el control de atribución de MapLibre (en móvil, `compact: true`).
 - **Versiones:** en producción conviene fijar una versión (`/vX.Y.Z/`) y actualizarla a propósito. `manifest.json` de cada release dice qué build de OpenStreetMap trae y el SHA-256 de cada archivo. Ver [Releases](#releases).
 - **Capas propias** (restaurantes, ubicación, rutas) las agrega la app encima con `map.addSource` y `map.addLayer`; este repositorio solo publica el mapa base.
 

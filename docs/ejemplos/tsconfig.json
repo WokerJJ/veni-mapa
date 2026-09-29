@@ -1,0 +1,15 @@
+{
+  // El ejemplo del README se verifica como lo compilaría la app (Vite):
+  // resolución de módulos "bundler", DOM y los paquetes reales del repositorio.
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2024", "dom"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["*.ts"]
+}

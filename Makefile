@@ -65,8 +65,9 @@ node_modules/.package-lock.json: package.json package-lock.json
 style: node_modules/.package-lock.json ## Estilos MapLibre claro/oscuro ES/EN en build/style (STYLE_BASE_URL=…)
 	@node scripts/style/build.ts
 
-check: node_modules/.package-lock.json ## Tipos (tsc), pruebas de Node y licencias de vendor/ al día
+check: node_modules/.package-lock.json ## Tipos (tsc, también del ejemplo del README), pruebas de Node y licencias de vendor/ al día
 	@npx tsc -p .
+	@npx tsc -p docs/ejemplos
 	@npm test --silent
 	@node scripts/vendor-licenses.ts --check
 
