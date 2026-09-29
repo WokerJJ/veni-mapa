@@ -16,6 +16,8 @@ BUILD_DATE ?=
 STYLE_BASE_URL ?= http://localhost:8080
 # Versión que queda en los metadatos de los estilos; la fija el workflow de release.
 STYLE_VERSION ?= dev
+# Tamaño máximo del extracto que acepta make verify (hoy pesa ~1,6 MB).
+PMTILES_MAX_MB ?= 50
 
 # Los valores de la región salen de config/region.yml. make regenera
 # build/region.mk cuando cambia el YAML y lo vuelve a leer antes de seguir.
@@ -30,9 +32,9 @@ $(BUILD_DIR)/region.mk: config/region.yml scripts/region.sh
 	@scripts/region.sh $< >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv $@.tmp $@
 
-export REGION_NAME REGION_BBOX REGION_MAXZOOM REGION_CENTER REGION_ZOOM BUILD_DIR BUILD_DATE STYLE_BASE_URL STYLE_VERSION
+export REGION_NAME REGION_BBOX REGION_MAXZOOM REGION_CENTER REGION_ZOOM BUILD_DIR BUILD_DATE STYLE_BASE_URL STYLE_VERSION PMTILES_MAX_MB
 
-.PHONY: help all extract style assets site serve check licenses clean
+.PHONY: help all extract style assets site serve check verify licenses clean
 
 help: ## Muestra esta ayuda
 	@echo "Uso: docker compose run --rm tools make <objetivo>"
@@ -63,6 +65,9 @@ check: node_modules/.package-lock.json ## Tipos (tsc), pruebas de Node y licenci
 	@npx tsc -p .
 	@npm test --silent
 	@node scripts/vendor-licenses.ts --check
+
+verify: node_modules/.package-lock.json ## Valida estilos (MapLibre) y extracto (tipo, caja, zoom, capas, tamaño)
+	@scripts/verify.sh
 
 licenses: node_modules/.package-lock.json ## Regenera licenses/vendor-deps.txt (tras actualizar MapLibre o PMTiles)
 	@node scripts/vendor-licenses.ts

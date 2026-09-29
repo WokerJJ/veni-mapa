@@ -32,3 +32,4 @@ Cada fontstack combina la fuente de marca con Noto Sans: según la OFL es una **
 | [font-maker](https://github.com/maplibre/font-maker) | Conversión de TTF a glyphs SDF | BSD-3-Clause |
 | [@maplibre/maplibre-gl-style-spec](https://github.com/maplibre/maplibre-style-spec) | Tipos y validación de los estilos | ISC |
 | [TypeScript](https://github.com/microsoft/TypeScript) | Verificación de tipos del generador | Apache-2.0 |
+| [Playwright](https://github.com/microsoft/playwright) | Prueba de render de la demo en Chromium sin interfaz | Apache-2.0 |

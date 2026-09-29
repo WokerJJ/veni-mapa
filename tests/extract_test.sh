@@ -18,6 +18,7 @@ cat >"$tmp/bin/pmtiles" <<'EOF'
 echo "$*" >>"$FAKE_LOG"
 case "$1" in
   version) echo "pmtiles falso" ;;
+  show) echo '{"maxzoom": 15, "tile_type": "mvt"}' ;;
   extract)
     if [[ " $* " == *" --dry-run "* ]]; then
       echo "dry-run de $2"
@@ -63,7 +64,7 @@ json="$BUILD_DIR/build.json"
 if jq -e --arg sha "$(sha256sum "$BUILD_DIR/prueba.pmtiles" | cut -d' ' -f1)" \
   --argjson bytes "$(stat -c %s "$BUILD_DIR/prueba.pmtiles")" \
   '.sha256 == $sha and .bytes == $bytes and .protomaps_build == "20260926"
-   and .bbox == [-76.3, 4.3, -76, 4.55] and .requested_maxzoom == 16 and .region == "prueba"' \
+   and .bbox == [-76.3, 4.3, -76, 4.55] and .requested_maxzoom == 16 and .source_maxzoom == 15 and .region == "prueba"' \
   "$json" >/dev/null; then
   pass "build.json coincide con el archivo generado"
 else

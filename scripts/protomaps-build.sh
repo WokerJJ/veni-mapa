@@ -20,7 +20,9 @@ if [[ -n "$requested" && ! "$requested" =~ ^[0-9]{8}$ ]]; then
   fail "la fecha debe tener el formato AAAAMMDD (recibido: '$requested')"
 fi
 
-builds="$(curl -fsSL --retry 3 --retry-delay 2 "$builds_url")" || fail "no se pudo leer la lista de builds de $builds_url"
+# --retry-all-errors: también reintenta cortes de conexión (SSL, error 56), que
+# --retry solo no cubre.
+builds="$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors "$builds_url")" || fail "no se pudo leer la lista de builds de $builds_url"
 
 # Solo claves con forma de build diaria; el índice puede traer otros archivos.
 dates="$(jq -r '.[].key | select(test("^[0-9]{8}\\.pmtiles$")) | rtrimstr(".pmtiles")' <<<"$builds" | sort)" \

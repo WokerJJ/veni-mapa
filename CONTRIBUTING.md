@@ -27,6 +27,6 @@ docker compose run --rm tools make extract assets         # pipeline
 docker compose run --rm tools bash tests/assets_test.sh   # una suite de pruebas
 ```
 
-Los objetivos y opciones están en el [README](README.md#uso). Las pruebas viven en `tests/*_test.sh` y la CI corre todas.
+Los objetivos y opciones están en el [README](README.md#uso), y las pruebas en su sección [Pruebas](README.md#pruebas): `tests/*_test.sh` y `make check` en la imagen, y el render con Playwright en el host (`npm run test:render`).
 
 En Windows git no registra el bit de ejecución: al crear un script nuevo en `scripts/` o `tests/`, marcalo con `git update-index --chmod=+x <archivo>`. La CI falla si falta.

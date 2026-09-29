@@ -45,6 +45,10 @@ pmtiles extract "${args[@]}" --quiet
 [[ -s "$pmtiles_out" ]] || { echo "extract.sh: pmtiles no generó $pmtiles_out" >&2; exit 1; }
 
 bytes="$(stat -c %s "$pmtiles_out")"
+# Zoom máximo de la build de origen: make verify comprueba que el extracto llegue
+# a mín(REGION_MAXZOOM, este valor).
+source_maxzoom="$(pmtiles show "$source_url" --header-json | jq -e '.maxzoom')" \
+  || { echo "extract.sh: no se pudo leer el encabezado de $source_url" >&2; exit 1; }
 jq -n \
   --arg region "$REGION_NAME" \
   --arg build_date "$date" \
@@ -52,12 +56,13 @@ jq -n \
   --arg bbox "$REGION_BBOX" \
   --argjson maxzoom "$REGION_MAXZOOM" \
   --argjson bytes "$bytes" \
+  --argjson source_maxzoom "$source_maxzoom" \
   --arg sha256 "$(sha256sum "$pmtiles_out" | cut -d' ' -f1)" \
   --arg pmtiles "$(pmtiles version 2>&1 | head -n1)" \
   --arg jq "$(jq --version 2>&1)" \
   --arg yq "$(yq --version 2>&1)" \
   '{region: $region, protomaps_build: $build_date, source: $source,
-    bbox: ($bbox | split(",") | map(tonumber)), requested_maxzoom: $maxzoom,
+    bbox: ($bbox | split(",") | map(tonumber)), requested_maxzoom: $maxzoom, source_maxzoom: $source_maxzoom,
     bytes: $bytes, sha256: $sha256,
     tools: {pmtiles: $pmtiles, jq: $jq, yq: $yq}}' >"$staging/build.json"
 

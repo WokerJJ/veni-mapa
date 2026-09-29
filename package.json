@@ -11,10 +11,12 @@
   "scripts": {
     "style": "node scripts/style/build.ts",
     "typecheck": "tsc -p .",
-    "test": "node --test \"tests/node/*.test.ts\""
+    "test": "node --test \"tests/node/*.test.ts\"",
+    "test:render": "playwright test"
   },
   "devDependencies": {
     "@maplibre/maplibre-gl-style-spec": "26.4.4",
+    "@playwright/test": "1.63.0",
     "@protomaps/basemaps": "5.7.2",
     "@types/geojson": "7946.0.16",
     "@types/node": "24.19.0",

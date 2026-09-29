@@ -13,5 +13,5 @@
     "noUncheckedIndexedAccess": true,
     "types": ["node", "geojson"]
   },
-  "include": ["scripts/**/*.ts", "tests/**/*.ts"]
+  "include": ["scripts/**/*.ts", "tests/**/*.ts", "playwright.config.ts"]
 }
