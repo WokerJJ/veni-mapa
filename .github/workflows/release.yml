@@ -42,21 +42,21 @@ jobs:
       # Etiquetas del PR de release (autorelease: pending/tagged).
       issues: write
     # Los PR que abre GITHUB_TOKEN no disparan la CI sola: sus workflows quedan
-    # esperando "Approve and run". Con una GitHub App (variable RELEASE_APP_ID y
+    # esperando "Approve and run". Con una GitHub App (variable RELEASE_APP_CLIENT_ID y
     # secret RELEASE_APP_PRIVATE_KEY), release-please abre el PR con otra
     # identidad y la CI corre sola. Sin la App, se aprueba a mano (README, Releases).
     env:
-      RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
+      RELEASE_APP_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
     outputs:
       release_created: ${{ steps.rp.outputs.release_created }}
       tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
       - name: Token de la GitHub App
         id: app
-        if: env.RELEASE_APP_ID != ''
+        if: env.RELEASE_APP_CLIENT_ID != ''
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ env.RELEASE_APP_ID }}
+          client-id: ${{ env.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write

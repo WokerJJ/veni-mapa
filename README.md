@@ -138,9 +138,10 @@ Los PR que abre `GITHUB_TOKEN` (el de release y el de la actualización mensual)
 - **Con una GitHub App (recomendado):** release-please y la actualización mensual abren el PR con la identidad de la App y la CI corre sola.
   1. Crear una GitHub App en la cuenta (*Settings → Developer settings → GitHub Apps*), sin webhook, con permisos de repositorio **Contents: read and write**, **Pull requests: read and write** e **Issues: read and write**, e instalarla solo en este repositorio.
   2. Generar una clave privada de la App.
-  3. En el repositorio: variable `RELEASE_APP_ID` con el *App ID* y secret `RELEASE_APP_PRIVATE_KEY` con la clave privada (*Settings → Secrets and variables → Actions*).
+  3. En el repositorio: variable `RELEASE_APP_CLIENT_ID` con el *Client ID* de la App (página de la App, *General*) y secret `RELEASE_APP_PRIVATE_KEY` con la clave privada (*Settings → Secrets and variables → Actions*).
+  4. Comprobar: *Actions → Actualizar extracto → Run workflow* con una `build_date` distinta de la de `data/build.json`; la CI del PR que se abra tiene que arrancar sin *Approve and run*. Si era solo de prueba, cerrar ese PR.
 
-  Mientras la variable no exista, los workflows usan `GITHUB_TOKEN` y siguen funcionando; solo falta aprobar la CI a mano.
+  Con la App, el PR de release, el tag, la release y el commit de datos quedan a nombre de la App (`<nombre>[bot]`). Mientras la variable no exista, los workflows usan `GITHUB_TOKEN` y siguen funcionando; solo falta aprobar la CI a mano. Si existe la variable pero falta el secret, el workflow falla con un error visible en vez de caer en `GITHUB_TOKEN`.
 
 Si la subida de artefactos falla, *Actions → Release → Run workflow* con el tag los vuelve a construir y adjuntar. Si la release ya tiene `manifest.json`, se reconstruye con la misma build de Protomaps y falla si el extracto no da el mismo SHA-256: una versión publicada no cambia de datos.
 
