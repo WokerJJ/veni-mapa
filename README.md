@@ -126,7 +126,9 @@ font-maker se fija en `FONT_MAKER_COMMIT` del [Dockerfile](docker/tools/Dockerfi
 
 Para la app, `manifest.json` es la entrada: dice qué build de OpenStreetMap trae la versión y cómo verificar cada archivo. Antes de 1.0, `feat` sube la versión menor y `fix` la de parche.
 
-Los PR y ramas que crea `GITHUB_TOKEN` no disparan otros workflows, así que `release.yml` lanza la CI (`workflow_dispatch`) sobre la rama del PR de release para que tenga el check `ci-ok`. Si la subida de artefactos falla, *Actions → Release → Run workflow* con el tag los vuelve a construir y adjuntar.
+Requisito del repositorio: *Settings → Actions → General → Workflow permissions →* **Allow GitHub Actions to create and approve pull requests**. Sin eso release-please falla al abrir el PR de release.
+
+Los PR y ramas que crea `GITHUB_TOKEN` no disparan otros workflows, así que `release.yml` lanza la CI (`workflow_dispatch`) sobre la rama del PR de release para que tenga el check `ci-ok`. Si la subida de artefactos falla, *Actions → Release → Run workflow* con el tag los vuelve a construir y adjuntar. Si la release ya tiene `manifest.json`, se reconstruye con la misma build de Protomaps y falla si el extracto no da el mismo SHA-256: una versión publicada no cambia de datos.
 
 ## Región
 

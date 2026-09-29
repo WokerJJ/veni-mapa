@@ -135,7 +135,21 @@ before="$(cat "$DIST_DIR/SHA256SUMS")"
 edit "$BUILD_DIR/style/veni-claro-es.json" '.metadata["veni:version"] = "dev"'
 scripts/release.sh >/dev/null 2>&1
 [[ "$(cat "$DIST_DIR/SHA256SUMS")" == "$before" && ! -e "$DIST_DIR.tmp" ]] \
-  && pass "un fallo deja dist/ intacto" || fail "un fallo tocó dist/"
+  && pass "un fallo de validación deja dist/ intacto" || fail "un fallo de validación tocó dist/"
+
+# Un fallo a mitad del empaquetado (ya con dist.tmp creado) tampoco toca dist/
+# y el trap borra dist.tmp.
+reset
+scripts/release.sh >/dev/null 2>&1
+before="$(cat "$DIST_DIR/SHA256SUMS")"
+rm "$BUILD_DIR"/assets/licenses/*.txt
+if scripts/release.sh >/dev/null 2>&1; then
+  fail "sin licencias de recursos debía fallar"
+elif [[ "$(cat "$DIST_DIR/SHA256SUMS")" == "$before" && ! -e "$DIST_DIR.tmp" ]]; then
+  pass "un fallo al empaquetar deja dist/ intacto y borra dist.tmp"
+else
+  fail "un fallo al empaquetar tocó dist/ o dejó dist.tmp"
+fi
 
 echo
 if ((failures > 0)); then

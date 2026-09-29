@@ -4,6 +4,7 @@
   "include-component-in-tag": false,
   "include-v-in-tag": true,
   "bump-minor-pre-major": true,
+  "initial-version": "0.1.0",
   "pull-request-title-pattern": "chore(release): publicar ${version}",
   "pull-request-header": "Release preparada por release-please. Al fusionar este PR se crea el tag, la release y el workflow de release le adjunta el mapa.",
   "changelog-sections": [

@@ -20,9 +20,11 @@ on:
 permissions:
   contents: read
 
-# Una ejecución a la vez y sin cancelar: una release a medio publicar no se interrumpe.
+# Una ejecución a la vez y sin cancelar: una release a medio publicar no se
+# interrumpe. GitHub deja un solo run pendiente por grupo, así que cada
+# re-adjunto manual tiene el suyo y un push a main no lo desplaza.
 concurrency:
-  group: release
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || 'main' }}
   cancel-in-progress: false
 
 jobs:
@@ -80,6 +82,27 @@ jobs:
           [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::tag inválido: '$TAG'"; exit 1; }
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null || { echo "::error::no existe la release $TAG"; exit 1; }
           echo "VERSION=${TAG#v}" >>"$GITHUB_ENV"
+      # Una versión publicada no cambia de datos. Si la release ya tiene
+      # manifest.json (un re-adjunto), se extrae la misma build de Protomaps y
+      # el extracto tiene que dar el mismo SHA-256; si no, la más reciente.
+      - name: Build de Protomaps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if ! grep -qx manifest.json <<<"$assets"; then
+            echo "Release sin manifest.json: build más reciente de Protomaps"
+            exit 0
+          fi
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern manifest.json --dir "$RUNNER_TEMP/publicado"
+          manifest="$RUNNER_TEMP/publicado/manifest.json"
+          build="$(jq -r '.protomaps_build' "$manifest")"
+          sha="$(jq -r '.pmtiles as $f | .files[] | select(.name == $f) | .sha256' "$manifest")"
+          [[ "$build" =~ ^[0-9]{8}$ && "$sha" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::manifest.json publicado sin build o SHA-256 válidos"; exit 1; }
+          echo "Release ya publicada con la build $build: se reconstruye con esa"
+          echo "BUILD_DATE=$build" >>"$GITHUB_ENV"
+          echo "PUBLISHED_PMTILES_SHA=$sha" >>"$GITHUB_ENV"
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
@@ -115,6 +138,10 @@ jobs:
         run: |
           (cd dist && sha256sum -c SHA256SUMS)
           jq -e --arg v "$VERSION" '.version == $v' dist/manifest.json
+          if [[ -n "${PUBLISHED_PMTILES_SHA:-}" ]]; then
+            jq -e --arg sha "$PUBLISHED_PMTILES_SHA" '.pmtiles as $f | .files[] | select(.name == $f) | .sha256 == $sha' dist/manifest.json \
+              || { echo "::error::el extracto reconstruido no coincide con el publicado en $TAG"; exit 1; }
+          fi
           jq . dist/manifest.json
       - name: Adjuntar a la release
         env:
