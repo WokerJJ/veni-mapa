@@ -60,3 +60,32 @@ Diario de avance por bloques (máximo 3 issues por bloque).
 - `--retry` de curl no reintenta cortes SSL: hace falta `--retry-all-errors`.
 
 **Sigue:** bloque 3 — #8 release v0.1.0, #9 publicación en R2 preparada y desactivada, #10 actualización mensual del extracto.
+
+## 2026-09-29 · Bloque 3: releases, R2 y actualización mensual
+
+**Issues cerrados:** #8 releases (PR #34 y release PR #35), #9 publicación en R2 (PR #36), #10 actualización mensual (PR #39). Nuevo: #37.
+
+**Qué quedó funcionando**
+
+- **Release [v0.1.0](https://github.com/WokerJJ/veni-mapa/releases/tag/v0.1.0)** publicada por release-please, con `roldanillo.pmtiles`, los 4 estilos, `assets.tar.gz` reproducible, `manifest.json` y `SHA256SUMS`. Se verificó descargándola: las sumas cuadran y los estilos apuntan a `https://tiles.veniroldanillo.co/v0.1.0`.
+- `make release` y `release.yml`: una release nueva extrae la build de `data/build.json` y exige su SHA-256; un re-adjunto usa la del `manifest.json` publicado, o `build_date` a mano si no lo hay.
+- Publicación en Cloudflare R2 preparada y desactivada: sin los 4 secrets `R2_*` avisa y termina en verde. Sube `/vX.Y.Z/` (inmutable) y `/latest/` (5 min), que nunca retrocede y se limpia. La guía de bucket, dominio, token mínimo, secrets y CORS está en `docs/PUBLICACION.md`.
+- `update.yml` (día 3 de cada mes o a mano): se probó con dos corridas reales. Con la build del día terminó en "Sin cambios". Con `build_date=20260928` abrió el PR #40 con el reporte (tamaño −0,3 %, 961 tiles), que se cerró sin fusionar porque era solo una prueba.
+- `scripts/tile-stats.ts` cuenta tiles por zoom. Da los mismos 961 que `addressed_tiles` del encabezado y que la librería `pmtiles`, y la CI lo comprueba con el extracto real.
+- CI: `make release` con datos reales en cada PR, y un aviso si `data/build.json` ya no es reproducible. Hoy lo es: la build 20260929 da el mismo SHA-256 en la CI.
+
+**Decisiones**
+
+- Versionado con release-please (`simple`) y `initial-version: 0.1.0`: con `0.0.0` en el manifest, la primera versión habría sido 1.0.0.
+- Los estilos de una release apuntan a `<TILES_BASE_URL>/vX.Y.Z` (variable de repositorio, por defecto `tiles.veniroldanillo.co`).
+- `data/build.json` es la build aprobada. El aviso de reproducibilidad no bloquea la CI: bloquearla impediría fusionar un cambio de región antes de que exista el PR de datos que le corresponde.
+- R2: CORS con los dos orígenes pedidos, pero `www` tiene que redirigir al apex. La caché del dominio no separa por `Origin`.
+- Se agregaron `tar` y `gzip` de GNU a la imagen de herramientas.
+
+**Aprendizajes**
+
+- Los PR que abre `GITHUB_TOKEN` sí crean sus workflows de `pull_request`, pero en *action_required*. El `ci-ok` de un `workflow_dispatch` no cuenta para la protección de `main`, y hubo que aprobar a mano las ejecuciones del PR de release. Además, el paso de dispatch falla al crear la release (`fromJSON('')`). Queda en #37 (prioridad alta).
+- La revisión encontró defectos en los tres PR antes de fusionar. Los más graves: v1.0.0 en lugar de 0.1.0, un `latest` que podía retroceder y un workflow mensual bloqueado por una release sin archivos. Las pruebas nuevas se validaron con mutaciones.
+- Esta sesión corrió en un contenedor en la nube: sin GraphQL (el tablero no se pudo mover a *Hecho*) y sin red hacia Alpine ni Protomaps. El pipeline completo se validó en la CI.
+
+**Sigue:** #37 (PR de release y de datos sin aprobación manual), #11 README y guía para contribuir a OSM, #27 Dependabot. El PR de release #38 (0.2.0) está abierto y espera tu decisión. Después, v0.2.0 · Rutas (#29).
