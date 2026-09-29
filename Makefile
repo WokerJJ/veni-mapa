@@ -41,8 +41,8 @@ all: extract assets style ## Genera todo: extracto, recursos y estilos
 extract: ## Extrae la región a build/<región>.pmtiles (reporte en build/extract-report.txt)
 	@scripts/extract.sh
 
-assets: ## Glyphs y sprites autohospedados (issue #4)
-	@echo "make assets: pendiente, llega con el issue #4" >&2; exit 1
+assets: ## Glyphs y sprites autohospedados en build/assets (verificados por SHA-256)
+	@scripts/assets.sh
 
 style: ## Estilos MapLibre claro/oscuro ES/EN (issue #5)
 	@echo "make style: pendiente, llega con el issue #5" >&2; exit 1
