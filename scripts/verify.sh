@@ -2,8 +2,9 @@
 # `make verify`: comprueba que lo generado sea un mapa válido antes de publicarlo.
 #
 #   Estilos   los cuatro pasan el validador oficial de MapLibre (gl-style-validate)
-#   PMTiles   tiles vectoriales (mvt), caja dentro de la región, zoom máximo igual a
-#             mín(REGION_MAXZOOM, zoom máximo de la build) y capas esperadas
+#   PMTiles   tiles vectoriales (mvt), caja igual a la de la región, zoom máximo
+#             igual a mín(REGION_MAXZOOM, zoom de la build), las capas que usan
+#             los estilos, y build.json que corresponde a este archivo
 #   Tamaño    el extracto no pasa de PMTILES_MAX_MB
 #
 # Lee REGION_NAME, REGION_BBOX, REGION_MAXZOOM (config/region.yml, vía make),
@@ -15,10 +16,6 @@ build_dir="${BUILD_DIR:-build}"
 max_mb="${PMTILES_MAX_MB:-50}"
 validator="${GL_STYLE_VALIDATE:-node_modules/.bin/gl-style-validate}"
 
-# Capas de Protomaps que usan los estilos Vení; si una build las cambia, el
-# estilo quedaría sin calles, agua o lugares sin que nada falle.
-required_layers=(earth water roads places landuse buildings pois)
-
 problems=0
 ok() { echo "ok   - $1"; }
 problem() {
@@ -26,17 +23,24 @@ problem() {
   problems=$((problems + 1))
 }
 
-[[ "$max_mb" =~ ^[0-9]+$ ]] || { echo "verify.sh: PMTILES_MAX_MB debe ser un entero (recibido: '$max_mb')" >&2; exit 1; }
+# Solo enteros decimales sin ceros a la izquierda: bash lee 010 como octal y 08
+# rompe la aritmética (y el bloque que la contiene se saltaría en silencio).
+[[ "$max_mb" =~ ^(0|[1-9][0-9]{0,5})$ ]] \
+  || { echo "verify.sh: PMTILES_MAX_MB debe ser un entero sin ceros a la izquierda (recibido: '$max_mb')" >&2; exit 1; }
 [[ -x "$validator" ]] || { echo "verify.sh: falta $validator (npm ci)" >&2; exit 1; }
 
 # --- Estilos ----------------------------------------------------------------------
 
+styles=()
 for variant in claro oscuro; do
   for lang in es en; do
     style="$build_dir/style/veni-$variant-$lang.json"
     if [[ ! -f "$style" ]]; then
       problem "falta $style (make style)"
-    elif output="$("$validator" "$style" 2>&1)"; then
+      continue
+    fi
+    styles+=("$style")
+    if output="$("$validator" "$style" 2>&1)"; then
       ok "$style es válido según la especificación de MapLibre"
     else
       problem "$style no es válido: $output"
@@ -44,23 +48,37 @@ for variant in claro oscuro; do
   done
 done
 
+# Capas del PMTiles que piden los estilos: la lista sale de los propios estilos,
+# así no se desincroniza cuando cambia @protomaps/basemaps.
+required_layers=()
+if ((${#styles[@]} > 0)); then
+  mapfile -t required_layers < <(jq -r '[.layers[]?."source-layer" // empty] | .[]' "${styles[@]}" 2>/dev/null | sort -u)
+fi
+
 # --- PMTiles ----------------------------------------------------------------------
 
 pmtiles="$build_dir/$REGION_NAME.pmtiles"
 build_json="$build_dir/build.json"
 if [[ ! -f "$pmtiles" || ! -f "$build_json" ]]; then
   problem "falta $pmtiles o $build_json (make extract)"
+elif ! header="$(pmtiles show "$pmtiles" --header-json 2>&1)" || ! jq -e 'type == "object"' <<<"$header" >/dev/null 2>&1; then
+  problem "no se pudo leer el encabezado de $pmtiles: $header"
+elif ! metadata="$(pmtiles show "$pmtiles" --metadata 2>&1)" || ! jq -e 'type == "object"' <<<"$metadata" >/dev/null 2>&1; then
+  problem "no se pudieron leer los metadatos de $pmtiles: $metadata"
 else
-  header="$(pmtiles show "$pmtiles" --header-json)"
-  metadata="$(pmtiles show "$pmtiles" --metadata)"
+  # build.json tiene que describir este archivo y no el de otra extracción.
+  sha="$(sha256sum "$pmtiles" | cut -d' ' -f1)"
+  [[ "$(jq -r '.sha256 // empty' "$build_json")" == "$sha" ]] \
+    && ok "$build_json corresponde a $pmtiles" \
+    || problem "$build_json no corresponde a $pmtiles (SHA-256 distinto): volvé a correr make extract"
 
   tile_type="$(jq -r '.tile_type' <<<"$header")"
   [[ "$tile_type" == mvt ]] && ok "tiles vectoriales (mvt)" || problem "tipo de tile '$tile_type', se esperaba mvt"
 
   source_maxzoom="$(jq -r '.source_maxzoom // empty' "$build_json")"
   maxzoom="$(jq -r '.maxzoom' <<<"$header")"
-  if [[ -z "$source_maxzoom" ]]; then
-    problem "$build_json no registra source_maxzoom (volvé a correr make extract)"
+  if [[ ! "$source_maxzoom" =~ ^(0|[1-9][0-9]?)$ ]]; then
+    problem "$build_json no registra un source_maxzoom entero (recibido: '$source_maxzoom'); volvé a correr make extract"
   else
     expected=$((REGION_MAXZOOM < source_maxzoom ? REGION_MAXZOOM : source_maxzoom))
     [[ "$maxzoom" == "$expected" ]] \
@@ -68,22 +86,29 @@ else
       || problem "zoom máximo $maxzoom, se esperaba $expected = mín(pedido $REGION_MAXZOOM, build $source_maxzoom)"
   fi
 
-  # La caja del extracto no puede salirse de la región (con margen de redondeo).
+  # pmtiles extract --bbox deja como caja exactamente la pedida (con margen de
+  # redondeo): ni más grande ni un pedazo de la región.
   if jq -e --arg bbox "$REGION_BBOX" '
-      ($bbox | split(",") | map(tonumber)) as $r | .bounds as $b | 1e-6 as $e
-      | $b[0] >= $r[0] - $e and $b[1] >= $r[1] - $e and $b[2] <= $r[2] + $e and $b[3] <= $r[3] + $e' \
+      ($bbox | split(",") | map(tonumber)) as $r | (.bounds // []) as $b | 1e-6 as $e
+      | ($b | length) == 4 and ([range(4)] | all(. as $i | (($b[$i] - $r[$i]) | fabs) <= $e))' \
       <<<"$header" >/dev/null; then
-    ok "caja $(jq -c '.bounds' <<<"$header") dentro de la región"
+    ok "caja $(jq -c '.bounds' <<<"$header") igual a la región"
   else
-    problem "caja $(jq -c '.bounds' <<<"$header") fuera de la región $REGION_BBOX"
+    problem "caja $(jq -c '.bounds' <<<"$header") distinta de la región $REGION_BBOX"
   fi
 
-  layers="$(jq -r '[.vector_layers[].id] | join(" ")' <<<"$metadata")"
-  missing=()
-  for layer in "${required_layers[@]}"; do
-    [[ " $layers " == *" $layer "* ]] || missing+=("$layer")
-  done
-  ((${#missing[@]} == 0)) && ok "capas esperadas presentes ($layers)" || problem "faltan capas: ${missing[*]} (hay: $layers)"
+  layers="$(jq -r '[.vector_layers[]?.id] | join(" ")' <<<"$metadata")"
+  if ((${#required_layers[@]} == 0)); then
+    problem "los estilos no piden ninguna capa: no hay contra qué comparar el extracto"
+  else
+    missing=()
+    for layer in "${required_layers[@]}"; do
+      [[ " $layers " == *" $layer "* ]] || missing+=("$layer")
+    done
+    ((${#missing[@]} == 0)) \
+      && ok "el extracto trae las ${#required_layers[@]} capas que piden los estilos ($layers)" \
+      || problem "faltan capas que piden los estilos: ${missing[*]} (hay: ${layers:-ninguna})"
+  fi
 
   bytes="$(stat -c %s "$pmtiles")"
   limit=$((max_mb * 1024 * 1024))
