@@ -23,12 +23,31 @@ jobs:
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
 
+  region:
+    name: Región (config/region.yml)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # yq v4 (mikefarah) viene instalado en los runners de Ubuntu.
+      - name: Herramientas
+        run: |
+          yq --version
+          sudo apt-get install -y -qq gawk mawk >/dev/null
+          # Locales con coma decimal: mawk convertía -76.30 en -76 con ellos.
+          sudo locale-gen es_CO.UTF-8 de_DE.UTF-8 >/dev/null
+      - name: Pruebas con mawk
+        run: AWK=mawk bash tests/region_test.sh
+      - name: Pruebas con gawk
+        run: AWK=gawk bash tests/region_test.sh
+      - name: Pruebas con mawk y locale es_CO
+        run: AWK=mawk LC_ALL=es_CO.UTF-8 bash tests/region_test.sh
+
   # Único check obligatorio en la protección de main: agrega el resultado de
   # todos los jobs, así sumar jobs nuevos no obliga a tocar la protección.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [actionlint]
+    needs: [actionlint, region]
     runs-on: ubuntu-latest
     steps:
       - name: Todos los jobs pasaron

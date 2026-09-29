@@ -1,0 +1,26 @@
+# Región que el pipeline recorta de OpenStreetMap.
+# Todo el repositorio (Makefile, CI, demo) lee estos valores; no se repiten
+# en ningún otro lado. Para cambiar la región basta con editar este archivo.
+
+# Identificador corto: se usa en nombres de archivo (build/<name>.pmtiles).
+name: roldanillo
+
+# Nombre legible para la demo y los metadatos.
+title: Roldanillo, Valle del Cauca, Colombia
+
+# Caja delimitadora en grados decimales WGS84, en el orden que espera
+# `pmtiles extract --bbox`: [oeste, sur, este, norte] = [lon, lat, lon, lat].
+# Cubre el casco urbano de Roldanillo, sus veredas y la zona de despegue de
+# parapente en la cordillera Occidental, con margen para la llegada desde
+# Zarzal y La Unión.
+bbox: [-76.30, 4.30, -76.00, 4.55]
+
+# Zoom máximo pedido al extraer. Las builds diarias de Protomaps llegan hasta
+# z15, así que pmtiles recorta a ese valor y MapLibre sobreescala (overzoom)
+# los tiles de z15 para mostrar z16 o más sin perder nitidez en los vectores.
+maxzoom: 16
+
+# Vista inicial de la demo: centro [lon, lat] y zoom.
+demo:
+  center: [-76.1547, 4.4128]
+  zoom: 13.5
