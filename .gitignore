@@ -1,0 +1,26 @@
+# Artefactos generados por el pipeline (se publican en releases, nunca en git)
+/build/
+/dist/
+*.pmtiles
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Pruebas
+/test-results/
+/playwright-report/
+
+# Entorno
+.env
+.env.*
+!.env.example
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+/.idea
+/.vscode
+
+# Memoria local de agentes (no se versiona)
+/.claude/agentes/
