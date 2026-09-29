@@ -2,7 +2,7 @@
 #
 # Se ejecuta dentro de la imagen de herramientas, sin instalar nada más:
 #   docker compose run --rm tools make <objetivo>
-# (En Linux o macOS con bash, curl, jq, yq v4, pmtiles y font-maker también corre directo.)
+# (En Linux o macOS con bash, curl, jq, yq v4, pmtiles, font-maker y Node 24 también corre directo.)
 
 SHELL := bash
 .SHELLFLAGS := -euo pipefail -c
@@ -41,7 +41,8 @@ help: ## Muestra esta ayuda
 	@echo
 	@grep -hE '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 	@echo
-	@echo "Variables: make extract BUILD_DATE=AAAAMMDD fija la build de Protomaps (por defecto, la más reciente)."
+	@echo "Variables: BUILD_DATE=AAAAMMDD (build de Protomaps; por defecto, la más reciente),"
+	@echo "           STYLE_BASE_URL y STYLE_VERSION (estilos), PMTILES_MAX_MB (verify)."
 
 all: extract assets style site ## Genera todo: extracto, recursos, estilos y sitio
 

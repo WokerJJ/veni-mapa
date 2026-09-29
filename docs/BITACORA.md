@@ -34,7 +34,7 @@ Diario de avance por bloques (máximo 3 issues por bloque).
 
 **Sigue:** bloque 2 — #5 estilo claro/oscuro ES/EN, #6 validación y render en CI, #7 demo en GitHub Pages.
 
-## 2026-09-30 · Bloque 2: estilos, demo y verificación
+## 2026-09-29 · Bloque 2: estilos, demo y verificación
 
 **Issues cerrados:** #5 estilos (PR #23), #7 demo en GitHub Pages (PR #26 y #28), #6 validación y render (PR #30). Además, #21 documentación del bloque 1 (PR #22).
 
