@@ -1,0 +1,11 @@
+# Uso: docker compose run --rm tools make <objetivo>
+services:
+  tools:
+    build: docker/tools
+    image: veni-mapa-tools
+    working_dir: /work
+    volumes:
+      - .:/work
+    environment:
+      # Fecha de la build de Protomaps (AAAAMMDD). Vacía = la más reciente.
+      BUILD_DATE: ${BUILD_DATE:-}

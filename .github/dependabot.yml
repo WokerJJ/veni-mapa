@@ -12,3 +12,11 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /docker/tools
+    schedule:
+      interval: monthly
+      timezone: America/Bogota
+    labels: ["type:chore", "area:deps"]
+    commit-message:
+      prefix: "chore(deps)"

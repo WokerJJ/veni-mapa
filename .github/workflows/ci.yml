@@ -22,6 +22,14 @@ jobs:
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
+      # En Windows git no registra permisos: un script nuevo puede llegar sin
+      # bit de ejecución y fallar solo en Linux.
+      - name: Scripts ejecutables
+        run: |
+          if git ls-files -s 'scripts/*.sh' 'tests/*_test.sh' | grep -v '^100755'; then
+            echo "::error::Scripts sin bit de ejecución: git update-index --chmod=+x <archivo>"
+            exit 1
+          fi
 
   region:
     name: Región (config/region.yml)
@@ -42,12 +50,43 @@ jobs:
       - name: Pruebas con mawk y locale es_CO
         run: AWK=mawk LC_ALL=es_CO.UTF-8 bash tests/region_test.sh
 
+  # El pipeline corre en la misma imagen de herramientas que se usa en local,
+  # así CI y desarrollo comparten versiones de make, yq, jq y pmtiles.
+  pipeline:
+    name: Pipeline (imagen de herramientas)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Imagen de herramientas
+        run: docker compose build tools
+      - name: Pruebas en la imagen
+        run: |
+          for test in tests/*_test.sh; do
+            echo "::group::$test"
+            docker compose run --rm tools bash "$test"
+            echo "::endgroup::"
+          done
+      - name: make extract
+        run: docker compose run --rm tools make extract
+      - name: Metadatos del extracto
+        run: |
+          docker compose run --rm tools bash -c 'pmtiles show "build/$(yq -r .name config/region.yml).pmtiles"'
+          cat build/extract-report.txt build/build.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: extracto
+          path: |
+            build/*.pmtiles
+            build/extract-report.txt
+            build/build.json
+          retention-days: 7
+
   # Único check obligatorio en la protección de main: agrega el resultado de
   # todos los jobs, así sumar jobs nuevos no obliga a tocar la protección.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [actionlint, region]
+    needs: [actionlint, region, pipeline]
     runs-on: ubuntu-latest
     steps:
       - name: Todos los jobs pasaron
