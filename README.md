@@ -18,7 +18,7 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | `extract` | Resuelve la build diaria más reciente de Protomaps, corre `pmtiles extract --dry-run` (reporte en `build/extract-report.txt`) y extrae la región a `build/<región>.pmtiles`. Deja la procedencia (build, bbox, tamaño, SHA-256) en `build/build.json`. |
 | `assets` | Descarga las fuentes y los sprites de [`config/assets.lock`](config/assets.lock) (fijados por commit y verificados por SHA-256) y genera en `build/assets` los glyphs de [`config/fontstacks.yml`](config/fontstacks.yml) con [font-maker](https://github.com/maplibre/font-maker). |
 | `style` | Genera `build/style/veni-{claro,oscuro}-{es,en}.json` con la marca Vení. `STYLE_BASE_URL` fija dónde se publican PMTiles, glyphs y sprites (por defecto `http://localhost:8080`). |
-| `check` | Verificación de tipos (TypeScript) y pruebas de Node: estilos, `build.ts` y servidor. |
+| `check` | Verificación de tipos (TypeScript), pruebas de Node (estilos, `build.ts`, servidor) y que `licenses/vendor-deps.txt` esté al día. |
 | `verify` | Valida los estilos con el validador oficial de MapLibre y el extracto: tiles vectoriales, caja dentro de la región, zoom máximo = mín(pedido, build), capas esperadas y tamaño (`PMTILES_MAX_MB`, 50 por defecto). |
 | `licenses` | Regenera `licenses/vendor-deps.txt` con los avisos de lo que MapLibre GL y PMTiles empaquetan (`make check` falla si quedó desactualizado). |
 | `site` | Arma `build/site`, el árbol que se publica: demo, PMTiles, recursos, estilos y licencias. |
@@ -91,9 +91,9 @@ El estilo usa las tipografías de la marca Vení, servidas desde el mismo lugar 
 | Fontstack | Uso | Respaldo incluido |
 | --- | --- | --- |
 | `Figtree Regular` | Etiquetas generales | Noto Sans Regular |
-| `Figtree SemiBold` | Vías principales y barrios | Noto Sans SemiBold |
+| `Figtree SemiBold` | Números de vías en sus escudos | Noto Sans SemiBold |
 | `Figtree Italic` | Agua | Noto Sans Italic |
-| `Bricolage Grotesque Bold` | Lugares destacados | Noto Sans Bold |
+| `Bricolage Grotesque Bold` | Lugares: municipio, barrios y veredas, departamentos y países | Noto Sans Bold |
 
 Un hosting estático no puede combinar fuentes al vuelo, así que font-maker mete el respaldo de Noto Sans dentro de cada fontstack: lo que Figtree o Bricolage no cubren (griego, cirílico, Latin extendido) sale de Noto. Los sprites son los de [protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets) (v4, claro y oscuro). Licencias en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
@@ -124,7 +124,7 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 | Scripts del pipeline (región, extracción, recursos, sitio, verificación) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
 | Generador de estilos, `build.ts`, servidor y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
-| Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
+| Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
 
 El render sirve `build/site` en la base con la que se generaron los estilos (por defecto `http://localhost:8080`; si ya corre `make serve`, lo reutiliza). Para usar otro puerto, generá el sitio con esa base: `docker compose run --rm tools make style site STYLE_BASE_URL=http://localhost:8095` y después `npm run test:render`.
 
