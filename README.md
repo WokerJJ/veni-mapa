@@ -6,7 +6,7 @@ Pipeline reproducible que recorta Roldanillo (Valle del Cauca, Colombia) de Open
 
 ## Región
 
-La región se define en un solo archivo, [`config/region.yml`](config/region.yml): caja delimitadora `[-76.30, 4.30, -76.00, 4.55]` (oeste, sur, este, norte, en WGS84), zoom máximo 16 y la vista inicial de la demo. `scripts/region.sh` valida el archivo y lo expone como variables de `make`, así ningún otro archivo repite esos valores.
+La región se define en un solo archivo, [`config/region.yml`](config/region.yml): la caja delimitadora (oeste, sur, este, norte, en WGS84) que cubre el casco urbano de Roldanillo y sus veredas, el zoom máximo y la vista inicial de la demo. `scripts/region.sh` valida el archivo y lo expone como variables de `make`, así ningún otro archivo repite esos valores.
 
 Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese zoom y MapLibre sobreescala (overzoom) los tiles para mostrar z16 o más.
 
