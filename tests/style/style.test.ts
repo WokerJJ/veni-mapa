@@ -3,9 +3,20 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
-import type { StyleSpecification } from "@maplibre/maplibre-gl-style-spec";
-import { BRAND, FLAVORS } from "../../scripts/style/flavors.ts";
-import { buildStyle, fontsUsed, LANGS, normalizeBaseUrl, VARIANTS, type StyleOptions } from "../../scripts/style/style.ts";
+import type { LayerSpecification, StyleSpecification, SymbolLayerSpecification } from "@maplibre/maplibre-gl-style-spec";
+import { BRAND, mix } from "../../scripts/style/flavors.ts";
+import {
+  buildStyle,
+  fontsUsed,
+  LANGS,
+  normalizeBaseUrl,
+  parseCenter,
+  parseRegionName,
+  parseZoom,
+  PLACE_LAYERS,
+  VARIANTS,
+  type StyleOptions,
+} from "../../scripts/style/style.ts";
 
 const base: Omit<StyleOptions, "variant" | "lang"> = {
   baseUrl: "https://tiles.example.com/v0.1.0/",
@@ -13,6 +24,7 @@ const base: Omit<StyleOptions, "variant" | "lang"> = {
   center: [-76.1547, 4.4128],
   zoom: 13.5,
   version: "0.1.0",
+  protomapsBuild: "20260928",
 };
 
 const combos = VARIANTS.flatMap((variant) => LANGS.map((lang) => ({ variant, lang })));
@@ -21,6 +33,11 @@ const styleFor = (key: string): StyleSpecification => {
   const style = styles.get(key);
   assert.ok(style, `falta el estilo ${key}`);
   return style;
+};
+const symbolLayer = (style: StyleSpecification, id: string): SymbolLayerSpecification => {
+  const layer = style.layers.find((l) => l.id === id);
+  assert.ok(layer?.type === "symbol", `falta la capa symbol ${id}`);
+  return layer;
 };
 
 // Fontstacks que genera `make assets`: claves de config/fontstacks.yml.
@@ -46,6 +63,17 @@ describe("estructura", () => {
       assert.deepEqual(style.center, [-76.1547, 4.4128]);
     });
 
+    it(`${key} registra versión, base y build de Protomaps en los metadatos`, () => {
+      assert.deepEqual(
+        {
+          version: (style.metadata as Record<string, unknown>)["veni:version"],
+          base: (style.metadata as Record<string, unknown>)["veni:base_url"],
+          build: (style.metadata as Record<string, unknown>)["veni:protomaps_build"],
+        },
+        { version: "0.1.0", base: "https://tiles.example.com/v0.1.0", build: "20260928" },
+      );
+    });
+
     it(`${key} lleva la atribución de OpenStreetMap`, () => {
       const source = style.sources.protomaps;
       assert.ok(source && "attribution" in source);
@@ -57,6 +85,13 @@ describe("estructura", () => {
     assert.match(String(styleFor("claro-es").sprite), /\/light$/);
     assert.match(String(styleFor("oscuro-es").sprite), /\/dark$/);
   });
+
+  it("los POI sin ícono propio en el sprite caen en un ícono de respaldo", () => {
+    const icon = symbolLayer(styleFor("claro-es"), "pois").layout?.["icon-image"];
+    assert.ok(Array.isArray(icon));
+    assert.equal(icon[0], "coalesce");
+    assert.deepEqual(icon.at(-1), ["image", "townspot"]);
+  });
 });
 
 describe("tipografías", () => {
@@ -67,13 +102,15 @@ describe("tipografías", () => {
       const missing = [...used].filter((font) => !publishedFonts.has(font));
       assert.deepEqual(missing, [], `fuentes sin publicar: ${missing.join(", ")}`);
     });
-  }
 
-  it("los lugares usan la tipografía de títulos de la marca", () => {
-    const layer = styleFor("claro-es").layers.find((l) => l.id === "places_locality");
-    assert.ok(layer?.type === "symbol");
-    assert.deepEqual(layer.layout?.["text-font"], ["Bricolage Grotesque Bold"]);
-  });
+    // Lista fija (issue #5), no PLACE_LAYERS: quitar una capa de la constante
+    // también tiene que hacer fallar la prueba.
+    for (const id of ["places_locality", "places_subplace", "places_region", "places_country"]) {
+      it(`${key}: ${id} usa la tipografía de títulos de la marca`, () => {
+        assert.deepEqual(symbolLayer(style, id).layout?.["text-font"], ["Bricolage Grotesque Bold"]);
+      });
+    }
+  }
 
   it("fontsUsed encuentra fuentes dentro de expresiones y de format", () => {
     const style = {
@@ -86,12 +123,20 @@ describe("tipografías", () => {
     } as StyleSpecification;
     assert.deepEqual([...fontsUsed(style)].sort(), ["Cuatro", "Dos", "Tres", "Uno"]);
   });
+
+  it("fontsUsed cuenta la fuente por defecto de MapLibre si falta text-font", () => {
+    const style = {
+      version: 8,
+      sources: {},
+      layers: [{ id: "a", type: "symbol", source: "s", layout: { "text-field": ["get", "name"] } }],
+    } as StyleSpecification;
+    assert.ok(fontsUsed(style).has("Open Sans Regular"));
+  });
 });
 
 describe("idiomas", () => {
   it("las etiquetas en español prefieren name:es y en inglés name:en", () => {
-    const field = (key: string) =>
-      JSON.stringify(styleFor(key).layers.find((l) => l.id === "places_locality")?.layout);
+    const field = (key: string) => JSON.stringify(symbolLayer(styleFor(key), "places_locality").layout);
     assert.match(field("claro-es"), /"name:es"/);
     assert.doesNotMatch(field("claro-en"), /"name:es"/);
     assert.match(field("claro-en"), /"name:en"/);
@@ -104,6 +149,8 @@ describe("idiomas", () => {
     assert.match(String((styleFor("claro-en").sources.protomaps as { attribution: string }).attribution), /contributors/);
   });
 });
+
+// --- Contraste sobre el estilo generado ----------------------------------------
 
 // Contraste WCAG 2.x: la marca exige 4.5:1 en texto.
 function luminance(hex: string): number {
@@ -118,60 +165,108 @@ function contrast(a: string, b: string): number {
   return (light + 0.05) / (dark + 0.05);
 }
 
-describe("contraste y marca", () => {
-  const pairs = [
-    ["roads_label_minor", "roads_label_minor_halo"],
-    ["roads_label_major", "roads_label_major_halo"],
-    ["subplace_label", "subplace_label_halo"],
-    ["city_label", "city_label_halo"],
-    ["state_label", "state_label_halo"],
-    ["address_label", "address_label_halo"],
-  ] as const;
+/** Colores hex literales de una propiedad (valor fijo o ramas de una expresión). */
+function hexColors(value: unknown): string[] {
+  if (typeof value === "string") return /^#[0-9a-f]{6}$/i.test(value) ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(hexColors);
+  return [];
+}
 
-  for (const [variant, flavor] of Object.entries(FLAVORS)) {
-    for (const [text, halo] of pairs) {
-      it(`${variant}: ${text} llega a 4.5:1 contra su halo`, () => {
-        const ratio = contrast(flavor[text], flavor[halo]);
-        assert.ok(ratio >= 4.5, `${flavor[text]} sobre ${flavor[halo]}: ${ratio.toFixed(2)}:1`);
+// Capas con texto sin halo, con el motivo. Cualquier otra sin halo falla.
+const WITHOUT_HALO: Record<string, string> = {
+  // El número va sobre el escudo del sprite (blanco en claro, negro en oscuro).
+  roads_shields: "texto sobre el ícono del escudo",
+};
+
+const textLayers = (style: StyleSpecification): SymbolLayerSpecification[] =>
+  style.layers.filter(
+    (l: LayerSpecification): l is SymbolLayerSpecification => l.type === "symbol" && l.layout?.["text-field"] !== undefined,
+  );
+
+describe("contraste y marca", () => {
+  for (const [key, style] of styles) {
+    for (const layer of textLayers(style)) {
+      it(`${key}: ${layer.id} llega a 4.5:1 contra su halo`, () => {
+        const halos = hexColors(layer.paint?.["text-halo-color"]);
+        if (halos.length === 0) {
+          assert.ok(WITHOUT_HALO[layer.id], `${layer.id} tiene texto sin halo y no está en WITHOUT_HALO`);
+          return;
+        }
+        assert.equal(halos.length, 1, `${layer.id}: halo que depende de datos`);
+        const halo = halos[0]!;
+        const colors = hexColors(layer.paint?.["text-color"]);
+        assert.ok(colors.length > 0, `${layer.id} no tiene color de texto literal`);
+
+        // pois: la rama por defecto del case repite el halo, pero el filtro de
+        // la capa solo deja pasar los tipos con color propio.
+        const expression = layer.paint?.["text-color"];
+        const unreachable = layer.id === "pois" && Array.isArray(expression) && expression.at(-1) === halo ? 1 : 0;
+        const checked = colors.slice(0, colors.length - unreachable);
+
+        const low = checked
+          .map((color) => [color, contrast(color, halo)] as const)
+          .filter(([, ratio]) => ratio < 4.5)
+          .map(([color, ratio]) => `${color} sobre ${halo}: ${ratio.toFixed(2)}:1`);
+        assert.deepEqual(low, []);
       });
     }
-    for (const text of ["state_label", "country_label"] as const) {
-      it(`${variant}: ${text} llega a 4.5:1 contra la tierra`, () => {
-        const ratio = contrast(flavor[text], flavor.earth);
-        assert.ok(ratio >= 4.5, `${flavor[text]} sobre ${flavor.earth}: ${ratio.toFixed(2)}:1`);
-      });
-    }
-    // Las etiquetas de agua usan el color del agua como halo.
-    it(`${variant}: ocean_label llega a 4.5:1 contra el agua`, () => {
-      const ratio = contrast(flavor.ocean_label, flavor.water);
-      assert.ok(ratio >= 4.5, `${flavor.ocean_label} sobre ${flavor.water}: ${ratio.toFixed(2)}:1`);
-    });
-    // Los POI usan la tierra como halo: restaurantes, parques, tiendas…
-    it(`${variant}: todos los colores de POI llegan a 4.5:1 contra la tierra`, () => {
-      assert.ok(flavor.pois, "el flavor no define colores de POI");
-      const low = Object.entries(flavor.pois)
-        .map(([name, color]) => [name, color, contrast(color, flavor.earth)] as const)
-        .filter(([, , ratio]) => ratio < 4.5)
-        .map(([name, color, ratio]) => `${name} ${color} ${ratio.toFixed(2)}:1`);
-      assert.deepEqual(low, []);
-    });
   }
 
+  it("PLACE_LAYERS no nombra capas que basemaps ya no genera", () => {
+    const ids = new Set(styleFor("claro-es").layers.map((l) => l.id));
+    assert.deepEqual(PLACE_LAYERS.filter((id) => !ids.has(id)), []);
+  });
+
+  it("la lista de capas sin halo no tiene entradas viejas", () => {
+    const ids = new Set(textLayers(styleFor("claro-es")).map((l) => l.id));
+    assert.deepEqual(Object.keys(WITHOUT_HALO).filter((id) => !ids.has(id)), []);
+  });
+
   it("arrebol nunca es color de texto en el estilo claro", () => {
-    const colors = styleFor("claro-es")
-      .layers.filter((l) => l.type === "symbol")
-      .map((l) => JSON.stringify(l.paint?.["text-color"] ?? "").toUpperCase());
-    assert.ok(colors.every((c) => !c.includes(BRAND.arrebol.toUpperCase())));
+    const colors = textLayers(styleFor("claro-es")).flatMap((l) => hexColors(l.paint?.["text-color"]).map((c) => c.toUpperCase()));
+    assert.ok(!colors.includes(BRAND.arrebol.toUpperCase()));
+  });
+
+  it("los tintes de vías salen de la marca", () => {
+    assert.equal(mix("#000000", "#FFFFFF", 0.5), "#808080");
+    assert.equal(mix(BRAND.arrebol, BRAND.blanco, 0), BRAND.arrebol);
   });
 });
 
-describe("URL base", () => {
-  it("quita la barra final", () => {
+describe("entradas", () => {
+  it("URL base: quita la barra final", () => {
     assert.equal(normalizeBaseUrl("https://a.example/x/"), "https://a.example/x");
   });
-  for (const bad of ["tiles/", "ftp://a.example", "https://a.example/?v=1", "https://a.example/#x"]) {
-    it(`rechaza '${bad}'`, () => {
+  for (const bad of [
+    "tiles/",
+    "ftp://a.example",
+    "https://a.example/?v=1",
+    "https://a.example/#x",
+    "https://a.example/?",
+    "https://a.example/#",
+    "https://u:p@a.example",
+  ]) {
+    it(`URL base: rechaza '${bad}'`, () => {
       assert.throws(() => normalizeBaseUrl(bad), /STYLE_BASE_URL/);
+    });
+  }
+
+  it("centro: acepta lon,lat", () => {
+    assert.deepEqual(parseCenter("-76.1547,4.4128"), [-76.1547, 4.4128]);
+  });
+  for (const bad of ["0x10,5", "-176.1,95", "4.41", "4.41,-76.15,1", "a,b", "", "1e2,3"]) {
+    it(`centro: rechaza '${bad}'`, () => {
+      assert.throws(() => parseCenter(bad), /REGION_CENTER/);
+    });
+  }
+  for (const bad of ["0x10", "23", "-1", "", "13,5"]) {
+    it(`zoom: rechaza '${bad}'`, () => {
+      assert.throws(() => parseZoom(bad), /REGION_ZOOM/);
+    });
+  }
+  for (const bad of ["a b?x", "Roldanillo", "-x", ""]) {
+    it(`región: rechaza '${bad}'`, () => {
+      assert.throws(() => parseRegionName(bad), /REGION_NAME/);
     });
   }
 });
