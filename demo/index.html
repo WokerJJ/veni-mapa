@@ -15,7 +15,7 @@
   <body>
     <header class="barra">
       <h1 class="marca">Vení <span data-i18n="subtitulo">Mapa de Roldanillo</span></h1>
-      <nav class="controles" aria-label="Opciones del mapa" data-i18n-aria="opciones">
+      <div class="controles" role="toolbar" aria-label="Opciones del mapa" data-i18n-aria="opciones">
         <div class="grupo" role="group" aria-labelledby="tema-titulo">
           <span id="tema-titulo" class="etiqueta" data-i18n="tema">Tema</span>
           <button type="button" data-tema="claro" data-i18n="claro">Claro</button>
@@ -26,9 +26,10 @@
           <button type="button" data-idioma="es" lang="es">ES</button>
           <button type="button" data-idioma="en" lang="en">EN</button>
         </div>
-      </nav>
+      </div>
     </header>
-    <main id="mapa" aria-label="Mapa de Roldanillo" data-i18n-aria="mapa"></main>
+    <!-- MapLibre le pone al lienzo su propio nombre accesible (y demo.js lo traduce). -->
+    <main class="principal"><div id="mapa"></div></main>
     <noscript><p class="aviso">Este mapa necesita JavaScript. · This map needs JavaScript.</p></noscript>
   </body>
 </html>
