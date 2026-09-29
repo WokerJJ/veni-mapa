@@ -23,6 +23,7 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | `licenses` | Regenera `licenses/vendor-deps.txt` con los avisos de lo que MapLibre GL y PMTiles empaquetan (`make check` falla si quedó desactualizado). |
 | `site` | Arma `build/site`, el árbol que se publica: demo, PMTiles, recursos, estilos y licencias. |
 | `serve` | Sirve `build/site` en <http://localhost:8080> con rangos HTTP. Necesita el puerto: `docker compose run --rm --service-ports tools make serve`. |
+| `release` | Arma `dist/` con lo que se adjunta a una release (ver [Releases](#releases)). Exige `RELEASE_VERSION=X.Y.Z` y estilos generados con `STYLE_VERSION` igual. |
 | `all` | `extract`, `assets`, `style` y `site`. |
 
 Para reproducir una versión exacta, fijá la build (funciona igual en bash y en PowerShell):
@@ -111,6 +112,22 @@ Las fuentes y los sprites están fijados en [`config/assets.lock`](config/assets
 
 font-maker se fija en `FONT_MAKER_COMMIT` del [Dockerfile](docker/tools/Dockerfile). Dependabot no vigila ninguno de los dos: se revisan a mano. `build/assets/assets.json` registra con qué lock, fontstacks, commit de font-maker y versión de FreeType se generó cada juego de glyphs.
 
+## Releases
+
+[release-please](https://github.com/googleapis/release-please) lee los commits convencionales de `main` y mantiene abierto un PR `chore(release): publicar X.Y.Z` con la versión y el [CHANGELOG.md](CHANGELOG.md). Al fusionarlo se crean el tag `vX.Y.Z` y la release, y [`release.yml`](.github/workflows/release.yml) construye el mapa de esa versión y le adjunta:
+
+| Archivo | Contenido |
+| --- | --- |
+| `roldanillo.pmtiles` | El extracto (ODbL, © colaboradores de OpenStreetMap). |
+| `veni-{claro,oscuro}-{es,en}.json` | Los cuatro estilos, con URLs a `<TILES_BASE_URL>/vX.Y.Z` (por defecto `https://tiles.veniroldanillo.co`, ver [docs/PUBLICACION.md](docs/PUBLICACION.md)). |
+| `assets.tar.gz` | `fonts/`, `sprites/`, `licenses/` y `assets.json`; reproducible (mismos recursos, mismo SHA-256). |
+| `manifest.json` | Versión, build de Protomaps, bbox, zoom máximo, base de los estilos, atribución y cada archivo con tamaño y SHA-256. |
+| `SHA256SUMS` | Sumas de todo lo anterior: `sha256sum -c SHA256SUMS`. |
+
+Para la app, `manifest.json` es la entrada: dice qué build de OpenStreetMap trae la versión y cómo verificar cada archivo. Antes de 1.0, `feat` sube la versión menor y `fix` la de parche.
+
+Los PR y ramas que crea `GITHUB_TOKEN` no disparan otros workflows, así que `release.yml` lanza la CI (`workflow_dispatch`) sobre la rama del PR de release para que tenga el check `ci-ok`. Si la subida de artefactos falla, *Actions → Release → Run workflow* con el tag los vuelve a construir y adjuntar.
+
 ## Región
 
 La región se define en un solo archivo, [`config/region.yml`](config/region.yml): la caja delimitadora (oeste, sur, este, norte, en WGS84) que cubre el casco urbano de Roldanillo y sus veredas, el zoom máximo y la vista inicial de la demo. `scripts/region.sh` valida el archivo y lo expone como variables de `make`, así ningún otro archivo repite esos valores.
@@ -121,7 +138,7 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 
 | Qué | Cómo | Dónde corre |
 | --- | --- | --- |
-| Scripts del pipeline (región, extracción, recursos, sitio, verificación) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
+| Scripts del pipeline (región, extracción, recursos, sitio, verificación, release) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
 | Generador de estilos, `build.ts`, servidor y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
 | Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |

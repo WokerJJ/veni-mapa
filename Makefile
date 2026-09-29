@@ -18,6 +18,8 @@ STYLE_BASE_URL ?= http://localhost:8080
 STYLE_VERSION ?= dev
 # Tamaño máximo del extracto que acepta make verify (hoy pesa ~1,6 MB).
 PMTILES_MAX_MB ?= 50
+# Versión X.Y.Z que arma make release en dist/; la fija el workflow de release.
+RELEASE_VERSION ?=
 
 # Los valores de la región salen de config/region.yml. make regenera
 # build/region.mk cuando cambia el YAML y lo vuelve a leer antes de seguir.
@@ -32,9 +34,9 @@ $(BUILD_DIR)/region.mk: config/region.yml scripts/region.sh
 	@scripts/region.sh $< >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv $@.tmp $@
 
-export REGION_NAME REGION_BBOX REGION_MAXZOOM REGION_CENTER REGION_ZOOM BUILD_DIR BUILD_DATE STYLE_BASE_URL STYLE_VERSION PMTILES_MAX_MB
+export REGION_NAME REGION_BBOX REGION_MAXZOOM REGION_CENTER REGION_ZOOM BUILD_DIR BUILD_DATE STYLE_BASE_URL STYLE_VERSION PMTILES_MAX_MB RELEASE_VERSION
 
-.PHONY: help all extract style assets site serve check verify licenses clean
+.PHONY: help all extract style assets site serve check verify release licenses clean
 
 help: ## Muestra esta ayuda
 	@echo "Uso: docker compose run --rm tools make <objetivo>"
@@ -42,7 +44,8 @@ help: ## Muestra esta ayuda
 	@grep -hE '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 	@echo
 	@echo "Variables: BUILD_DATE=AAAAMMDD (build de Protomaps; por defecto, la más reciente),"
-	@echo "           STYLE_BASE_URL y STYLE_VERSION (estilos), PMTILES_MAX_MB (verify)."
+	@echo "           STYLE_BASE_URL y STYLE_VERSION (estilos), PMTILES_MAX_MB (verify),"
+	@echo "           RELEASE_VERSION=X.Y.Z (release)."
 
 all: extract assets style site ## Genera todo: extracto, recursos, estilos y sitio
 
@@ -70,6 +73,9 @@ check: node_modules/.package-lock.json ## Tipos (tsc), pruebas de Node y licenci
 verify: node_modules/.package-lock.json ## Valida estilos (MapLibre) y extracto (tipo, caja, zoom, capas, tamaño)
 	@scripts/verify.sh
 
+release: ## Arma dist/ para una release: extracto, estilos, assets.tar.gz, manifest.json y SHA256SUMS (RELEASE_VERSION=X.Y.Z)
+	@scripts/release.sh
+
 licenses: node_modules/.package-lock.json ## Regenera licenses/vendor-deps.txt (tras actualizar MapLibre o PMTiles)
 	@node scripts/vendor-licenses.ts
 
@@ -80,5 +86,5 @@ site: node_modules/.package-lock.json ## Arma build/site para publicar: demo, PM
 serve: node_modules/.package-lock.json ## Sirve build/site en http://localhost:8080 (con rangos HTTP, como Pages)
 	@SITE_DIR=$(BUILD_DIR)/site node scripts/serve.ts
 
-clean: ## Borra build/, incluido el caché de descargas de make assets
-	rm -rf $(BUILD_DIR)
+clean: ## Borra build/ (incluido el caché de descargas de make assets) y dist/
+	rm -rf $(BUILD_DIR) dist

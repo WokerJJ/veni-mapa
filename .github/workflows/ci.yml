@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Lo lanza release.yml sobre la rama del PR de release: los PR que abre
+  # GITHUB_TOKEN no disparan el evento pull_request.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -206,6 +209,16 @@ jobs:
           name: recursos
           path: build/assets
           retention-days: 7
+      # El mismo empaquetado que hace release.yml, con los datos reales de esta
+      # corrida: un error de make release aparece aquí y no al publicar.
+      - name: make release (prueba)
+        run: |
+          docker compose run --rm tools make style release \
+            STYLE_BASE_URL=https://tiles.example.com/v0.0.0 STYLE_VERSION=0.0.0 RELEASE_VERSION=0.0.0
+          (cd dist && sha256sum -c SHA256SUMS)
+          tar -tzf dist/assets.tar.gz | grep -x 'fonts/Figtree Regular/0-255.pbf' >/dev/null
+          tar -tzf dist/assets.tar.gz | grep -x 'licenses/NotoSans-OFL.txt' >/dev/null
+          jq -e '.version == "0.0.0" and (.protomaps_build | test("^[0-9]{8}$")) and (.files | length) == 6' dist/manifest.json
       # Render en Chromium sin interfaz (en el runner: Playwright no corre en
       # Alpine). El sitio se arma con la base por defecto, la misma URL en la que
       # Playwright lo sirve.
