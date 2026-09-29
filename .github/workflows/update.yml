@@ -42,7 +42,13 @@ jobs:
           [[ -z "$INPUT_BUILD_DATE" || "$INPUT_BUILD_DATE" =~ ^[0-9]{8}$ ]] \
             || { echo "::error::build_date debe ser AAAAMMDD (recibido: '$INPUT_BUILD_DATE')"; exit 1; }
           echo "BUILD_DATE=$INPUT_BUILD_DATE" >>"$GITHUB_ENV"
+      # Siempre main: el PR va contra main aunque se lance desde otra rama. Sin
+      # credenciales guardadas mientras corren npm ci y el procesamiento de
+      # datos bajados de la red; el token se usa solo en el paso del PR.
       - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
       - name: Usuario del runner para el contenedor
         run: |
           echo "HOST_UID=$(id -u)" >>"$GITHUB_ENV"
@@ -63,14 +69,26 @@ jobs:
       # Lo que se propone pasa la misma verificación que en CI.
       - name: make style verify
         run: docker compose run --rm tools make style verify
-      # La última release (si hay) con su manifest y su extracto, para comparar.
+      # La última release que ya tiene sus archivos (manifest.json): una recién
+      # creada por release-please puede no tenerlos todavía, o no haberlos
+      # recibido nunca si su job de artefactos falló.
       - name: Última release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           region="$(yq -r .name config/region.yml)"
-          tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          tags="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq '.[].tagName')"
+          tag=""
+          while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            assets="$(gh release view "$candidate" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+            if grep -qx manifest.json <<<"$assets" && grep -qxF "$region.pmtiles" <<<"$assets"; then
+              tag="$candidate"
+              break
+            fi
+            echo "::notice::$candidate no tiene manifest.json y $region.pmtiles: se busca una anterior"
+          done <<<"$tags"
           mkdir -p build/anterior
           if [[ -n "$tag" ]]; then
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir build/anterior \
@@ -79,7 +97,7 @@ jobs:
             echo "Comparando con $tag"
           else
             echo "PREVIOUS_ARGS=" >>"$GITHUB_ENV"
-            echo "Sin releases: el reporte no compara"
+            echo "Sin releases con archivos: el reporte no compara"
           fi
           echo "REGION=$region" >>"$GITHUB_ENV"
       - name: Reporte y data/build.json
@@ -105,7 +123,11 @@ jobs:
           git switch -C "$BRANCH"
           git add data/build.json
           git commit -m "$title"
-          git push --force origin "$BRANCH"
+          # La rama es del workflow: cada corrida la rehace desde main.
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" \
+            push --force "https://github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
           number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [[ -n "$number" ]]; then
             gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file build/update-report.md

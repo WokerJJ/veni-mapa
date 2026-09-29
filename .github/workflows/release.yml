@@ -16,6 +16,10 @@ on:
         description: "Release existente a la que volver a adjuntar los artefactos (vX.Y.Z)"
         required: true
         type: string
+      build_date:
+        description: "Solo si la release no tiene manifest.json: build de Protomaps (AAAAMMDD) en lugar de la de data/build.json (por ejemplo, si Protomaps ya la borró)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -86,29 +90,43 @@ jobs:
         with:
           ref: ${{ env.TAG }}
       # Qué build de Protomaps extraer y qué SHA-256 tiene que dar:
-      # - re-adjunto (la release ya tiene manifest.json): la de ese manifest; una
+      # - re-adjunto de una release con manifest.json: la de ese manifest; una
       #   versión publicada no cambia de datos.
-      # - release nueva: la de data/build.json del tag, la que aprobó el último PR
-      #   de actualización mensual (update.yml).
-      # La extracción es reproducible: misma build, mismo archivo.
+      # - release sin manifest.json: la de data/build.json del tag, la que aprobó
+      #   el último PR de actualización mensual (update.yml). La extracción es
+      #   reproducible: misma build, mismo archivo.
+      # - release sin manifest.json y build_date a mano (re-adjunto): esa build,
+      #   sin SHA-256 esperado. Es la salida si Protomaps ya borró la aprobada.
       - name: Build de Protomaps
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_BUILD_DATE: ${{ inputs.build_date }}
         run: |
           set -euo pipefail
+          [[ -z "${INPUT_BUILD_DATE:-}" || "$INPUT_BUILD_DATE" =~ ^[0-9]{8}$ ]] || { echo "::error::build_date debe ser AAAAMMDD"; exit 1; }
           assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          sha=""
           if grep -qx manifest.json <<<"$assets"; then
+            [[ -z "${INPUT_BUILD_DATE:-}" ]] || { echo "::error::$TAG ya tiene manifest.json: una versión publicada no cambia de build"; exit 1; }
             gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern manifest.json --dir "$RUNNER_TEMP/publicado"
             manifest="$RUNNER_TEMP/publicado/manifest.json"
             build="$(jq -r '.protomaps_build' "$manifest")"
             sha="$(jq -r '.pmtiles as $f | .files[] | select(.name == $f) | .sha256' "$manifest")"
             source="manifest.json publicado en $TAG"
-          else
+          elif [[ -n "${INPUT_BUILD_DATE:-}" ]]; then
+            build="$INPUT_BUILD_DATE"
+            source="build_date pedida a mano"
+            echo "::warning::$TAG se construye con la build $build pedida a mano, sin SHA-256 esperado"
+          elif [[ -f data/build.json ]]; then
             build="$(jq -r '.protomaps_build' data/build.json)"
             sha="$(jq -r '.sha256' data/build.json)"
             source="data/build.json de $TAG"
+          else
+            echo "::error::$TAG no tiene manifest.json ni data/build.json: volvé a lanzar el workflow con build_date"
+            exit 1
           fi
-          [[ "$build" =~ ^[0-9]{8}$ && "$sha" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::$source sin build o SHA-256 válidos"; exit 1; }
+          [[ "$build" =~ ^[0-9]{8}$ && ( -z "$sha" && -n "${INPUT_BUILD_DATE:-}" || "$sha" =~ ^[0-9a-f]{64}$ ) ]] \
+            || { echo "::error::$source sin build o SHA-256 válidos"; exit 1; }
           echo "Build $build ($source)"
           echo "BUILD_DATE=$build" >>"$GITHUB_ENV"
           echo "EXPECTED_PMTILES_SHA=$sha" >>"$GITHUB_ENV"
@@ -144,8 +162,10 @@ jobs:
         run: |
           (cd dist && sha256sum -c SHA256SUMS)
           jq -e --arg v "$VERSION" '.version == $v' dist/manifest.json
-          jq -e --arg sha "$EXPECTED_PMTILES_SHA" '.pmtiles as $f | .files[] | select(.name == $f) | .sha256 == $sha' dist/manifest.json \
-            || { echo "::error::el extracto no da el SHA-256 esperado para la build $BUILD_DATE"; exit 1; }
+          if [[ -n "$EXPECTED_PMTILES_SHA" ]]; then
+            jq -e --arg sha "$EXPECTED_PMTILES_SHA" '.pmtiles as $f | .files[] | select(.name == $f) | .sha256 == $sha' dist/manifest.json \
+              || { echo "::error::el extracto no da el SHA-256 esperado para la build $BUILD_DATE (¿cambió la región o go-pmtiles?)"; exit 1; }
+          fi
           jq . dist/manifest.json
       - name: Adjuntar a la release
         env:

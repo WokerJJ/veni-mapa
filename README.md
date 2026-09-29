@@ -138,7 +138,9 @@ Los PR y ramas que crea `GITHUB_TOKEN` no disparan otros workflows, así que `re
 
 `data/build.json` es la build aprobada: al publicar una release, `release.yml` extrae esa misma build y falla si el PMTiles no da ese SHA-256. Así una release trae exactamente los datos revisados en el PR. Los tiles por zoom los cuenta [`scripts/tile-stats.ts`](scripts/tile-stats.ts) leyendo los directorios del PMTiles (go-pmtiles no los reporta).
 
-Como el de release, el PR lo abre `GITHUB_TOKEN`: sus workflows esperan *Approve and run* antes de correr (issue #37). Las builds diarias de Protomaps no se guardan para siempre: conviene publicar la release en las semanas siguientes a fusionar el PR.
+Como el de release, el PR lo abre `GITHUB_TOKEN`: sus workflows esperan *Approve and run* antes de correr (issue #37). La rama `chore/actualizar-extracto` es del workflow: cada corrida la rehace desde `main` y pisa lo que se haya empujado a mano.
+
+El PR es `chore(datos)`, así que por sí solo no crea una release: la build aprobada se usa en la siguiente `feat` o `fix`. Las builds diarias de Protomaps no se guardan para siempre, y la CI de cada PR avisa (*data/build.json sigue siendo reproducible*) si la build de `data/build.json` ya no se puede extraer o ya no da su SHA-256, por ejemplo porque el PR cambia la región o go-pmtiles. Si una release llega a fallar por eso, *Actions → Release → Run workflow* con el tag y `build_date` la construye con otra build.
 
 ## Región
 

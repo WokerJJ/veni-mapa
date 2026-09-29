@@ -131,8 +131,11 @@ describe("CLI", () => {
 
   it("rechaza un PMTiles anterior que no coincide con su manifest", async () => {
     writeFileSync(join(dir, "anterior.pmtiles"), fileA);
-    await assert.rejects(cli(build, withPrevious), /anterior\.pmtiles no coincide/);
-    writeFileSync(join(dir, "anterior.pmtiles"), fileB);
+    try {
+      await assert.rejects(cli(build, withPrevious), /anterior\.pmtiles no coincide/);
+    } finally {
+      writeFileSync(join(dir, "anterior.pmtiles"), fileB);
+    }
   });
 
   it("rechaza una build inválida", async () => {

@@ -132,6 +132,25 @@ jobs:
           jq -e '.glyphs_sha256 | test("^[0-9a-f]{64}$")' build/assets/assets.json
       - name: make extract
         run: docker compose run --rm tools make extract
+      # La próxima release extrae la build de data/build.json y exige su SHA-256.
+      # Si ya no se puede (Protomaps borró la build, o este PR cambia la región
+      # o go-pmtiles), se avisa aquí y no al publicar. Es un aviso y no un fallo:
+      # los datos nuevos los propone update.yml después de fusionar.
+      - name: data/build.json sigue siendo reproducible
+        run: |
+          build="$(jq -r .protomaps_build data/build.json)"
+          want="$(jq -r .sha256 data/build.json)"
+          if ! docker compose run --rm -e BUILD_DATE="$build" tools make extract BUILD_DIR=build/datos >"$RUNNER_TEMP/datos.log" 2>&1; then
+            tail -n 5 "$RUNNER_TEMP/datos.log"
+            echo "::warning title=data/build.json::no se pudo extraer la build $build: la próxima release fallará. Corré Actualizar extracto, o re-adjuntá con build_date."
+            exit 0
+          fi
+          got="$(jq -r .sha256 build/datos/build.json)"
+          if [[ "$got" == "$want" ]]; then
+            echo "La build $build sigue dando $want"
+          else
+            echo "::warning title=data/build.json::la build $build ahora da $got y no $want (¿cambió la región o go-pmtiles?): la próxima release fallará. Tras fusionar, corré Actualizar extracto."
+          fi
       - name: make style
         run: docker compose run --rm tools make style STYLE_BASE_URL="$STYLE_BASE_URL"
         env:

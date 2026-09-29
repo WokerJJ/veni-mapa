@@ -71,6 +71,32 @@ describe("fileTileStats", () => {
     assert.deepEqual(await fileTileStats(write(pmtiles(root, leaves))), expected);
   });
 
+  it("una corrida que cruza de zoom se reparte por zoom", async () => {
+    // IDs 3-6: los dos últimos de z1 y los dos primeros de z2.
+    const root = directory([{ tileId: 3, offset: 0, length: 1, runLength: 4 }]);
+    assert.deepEqual(await fileTileStats(write(pmtiles(root))), { tiles: 4, by_zoom: { "1": 2, "2": 2 } });
+  });
+
+  it("una corrida enorme no se recorre tile por tile", async () => {
+    // Todos los tiles de z0 a z20 en una sola entrada: iterando por ID tardaría minutos.
+    const total = (4 ** 21 - 1) / 3;
+    const root = directory([{ tileId: 0, offset: 0, length: 1, runLength: total }]);
+    const stats = await fileTileStats(write(pmtiles(root)));
+    assert.equal(stats.tiles, total);
+    assert.equal(stats.by_zoom["20"], 4 ** 20);
+  });
+
+  it("sigue una hoja dentro de otra hoja", async () => {
+    // raíz → hoja A (bytes 0..) → hoja B con los tiles.
+    const leafB = directory(entries);
+    const leafA = directory([{ tileId: 0, offset: 64, length: leafB.length, runLength: 0 }]);
+    const leaves = new Uint8Array(64 + leafB.length);
+    leaves.set(leafA, 0);
+    leaves.set(leafB, 64);
+    const root = directory([{ tileId: 0, offset: 0, length: leafA.length, runLength: 0 }]);
+    assert.deepEqual(await fileTileStats(write(pmtiles(root, leaves))), expected);
+  });
+
   it("rechaza un directorio que se apunta a sí mismo", async () => {
     // Una hoja que apunta al propio directorio hoja: sin límite, recursión infinita.
     const leaf = directory([{ tileId: 0, offset: 0, length: 5, runLength: 0 }]);

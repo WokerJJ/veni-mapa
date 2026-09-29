@@ -3,9 +3,9 @@
 //   node scripts/tile-stats.ts build/roldanillo.pmtiles
 //   {"tiles": 1234, "by_zoom": {"0": 1, "1": 1, ...}}
 //
-// go-pmtiles no reporta tiles por zoom; esto lo usan el reporte de la
-// actualización mensual y el manifest de cada release. Un tile repetido
-// (run_length > 1, por ejemplo mar abierto) cuenta una vez por posición.
+// go-pmtiles no reporta tiles por zoom; lo usa el reporte de la actualización
+// mensual (update-report.ts). Un tile repetido (run_length > 1, por ejemplo mar
+// abierto) cuenta una vez por posición.
 import { open } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
@@ -26,6 +26,9 @@ const HEADER_BYTES = 127;
 // Límite de niveles de directorios hoja: la especificación usa uno; más de
 // unos pocos solo aparece en un archivo corrupto o malicioso.
 const MAX_DEPTH = 4;
+// Tope de entradas leídas en total: acota el trabajo ante un archivo con
+// muchas hojas que apuntan al mismo directorio. El extracto real tiene ~1.000.
+const MAX_ENTRIES = 5_000_000;
 
 type Read = (offset: number, length: number) => Promise<Uint8Array>;
 
@@ -75,6 +78,11 @@ export function parseDirectory(buf: Uint8Array): Entry[] {
   return entries;
 }
 
+// Primer tile ID del zoom z: (4^z - 1) / 3.
+function firstId(z: number): number {
+  return (4 ** z - 1) / 3;
+}
+
 // Zoom de un tile ID de PMTiles: los IDs de z empiezan en (4^z - 1) / 3.
 export function zoomOf(tileId: number): number {
   let z = 0;
@@ -100,18 +108,23 @@ export async function tileStats(read: Read): Promise<TileStats> {
 
   const byZoom = new Map<number, number>();
   let tiles = 0;
+  let entriesRead = 0;
   const walk = async (offset: number, length: number, depth: number): Promise<void> => {
     if (depth > MAX_DEPTH) throw new Error("PMTiles: demasiados niveles de directorios");
     const entries = parseDirectory(decompress(await read(offset, length), compression));
+    entriesRead += entries.length;
+    if (entriesRead > MAX_ENTRIES) throw new Error("PMTiles: demasiadas entradas de directorio");
     for (const e of entries) {
       if (e.runLength === 0) {
         await walk(leafOffset + e.offset, e.length, depth + 1);
         continue;
       }
-      // Una corrida no cruza de zoom en la práctica, pero se cuenta por ID.
-      for (let id = e.tileId; id < e.tileId + e.runLength; id++) {
-        const z = zoomOf(id);
-        byZoom.set(z, (byZoom.get(z) ?? 0) + 1);
+      // La corrida [tileId, tileId + runLength) se reparte por zoom con
+      // aritmética de intervalos, sin recorrer ID por ID.
+      const end = e.tileId + e.runLength;
+      for (let z = zoomOf(e.tileId); firstId(z) < end; z++) {
+        const count = Math.min(end, firstId(z + 1)) - Math.max(e.tileId, firstId(z));
+        byZoom.set(z, (byZoom.get(z) ?? 0) + count);
       }
       tiles += e.runLength;
     }
