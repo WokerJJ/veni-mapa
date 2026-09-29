@@ -1,0 +1,16 @@
+# Fontstacks que genera `make assets` con font-maker (glyphs SDF en PBF).
+#
+# Clave: nombre del fontstack tal como lo pide el estilo en `text-font`.
+# Valor: archivos de config/assets.lock. El primero manda; los siguientes solo
+# aportan los caracteres que le faltan. Así el respaldo de Noto Sans va dentro
+# de cada fontstack, porque un hosting estático (Pages, R2) no puede combinar
+# fuentes al vuelo como haría un servidor de glyphs.
+
+# Etiquetas generales (calles, lugares pequeños, puntos de interés).
+Figtree Regular: [fonts/Figtree-Regular.ttf, fonts/NotoSans-Regular.ttf]
+# Etiquetas con más peso (vías principales, barrios).
+Figtree SemiBold: [fonts/Figtree-SemiBold.ttf, fonts/NotoSans-SemiBold.ttf]
+# Agua (ríos, quebradas, lagos).
+Figtree Italic: [fonts/Figtree-Italic.ttf, fonts/NotoSans-Italic.ttf]
+# Lugares destacados (municipio, veredas, países): tipografía de títulos de la marca.
+Bricolage Grotesque Bold: [fonts/BricolageGrotesque-Bold.ttf, fonts/NotoSans-Bold.ttf]
