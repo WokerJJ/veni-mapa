@@ -41,14 +41,20 @@ require "$build_dir/assets/fonts" "corré make assets"
 require "$build_dir/assets/sprites" "corré make assets"
 require "$build_dir/assets/licenses" "corré make assets"
 require "$build_dir/assets/assets.json" "corré make assets"
-require "$build_dir/style" "corré make style"
+for variant in claro oscuro; do
+  for lang in es en; do
+    require "$build_dir/style/veni-$variant-$lang.json" "corré make style"
+  done
+done
 require node_modules/maplibre-gl/dist/maplibre-gl.mjs "faltan las dependencias de Node: npm ci"
 require node_modules/pmtiles/dist/pmtiles.js "faltan las dependencias de Node: npm ci"
 
 # Los estilos tienen que apuntar a la base de esta publicación: si no, el sitio
-# pediría tiles y glyphs a otra URL (por ejemplo, localhost).
-base="${STYLE_BASE_URL%/}"
-for style in "$build_dir"/style/*.json; do
+# pediría tiles y glyphs a otra URL (por ejemplo, localhost). La base se
+# normaliza con la misma función que usó make style (host en minúsculas, sin
+# barras finales ni puerto por defecto).
+base="$(node -e 'import("./scripts/style/style.ts").then((m) => console.log(m.normalizeBaseUrl(process.argv[1]))).catch((e) => { console.error(e.message); process.exit(1); })' "$STYLE_BASE_URL")"   || fail "STYLE_BASE_URL inválida"
+for style in "$build_dir"/style/veni-*.json; do
   styled_base="$(jq -r '.metadata["veni:base_url"]' "$style")"
   [[ "$styled_base" == "$base" ]] \
     || fail "$style apunta a '$styled_base', no a '$base': corré make style con la misma STYLE_BASE_URL"
@@ -69,11 +75,14 @@ cp "$pmtiles" "$build_dir/build.json" "$tmp/"
 cp -R "$build_dir/assets/fonts" "$build_dir/assets/sprites" "$tmp/"
 cp "$build_dir/assets/assets.json" "$tmp/"
 cp -R "$build_dir/style" "$tmp/style"
-# Incluye las de MapLibre GL y PMTiles (licenses/ del repo, copiadas por make assets).
+# Licencias de los recursos (make assets) y, directo del repositorio, las de
+# vendor/: así un build/assets viejo no deja el sitio sin ellas.
 cp "$build_dir"/assets/licenses/*.txt "$tmp/licenses/"
+for license in maplibre-gl-BSD-3.txt pmtiles-BSD-3.txt vendor-deps.txt; do
+  require "licenses/$license" "licencia de vendor/"
+  cp "licenses/$license" "$tmp/licenses/"
+done
 
-# Pages publica tal cual; .nojekyll evita que ignore carpetas o archivos raros.
-touch "$tmp/.nojekyll"
 chmod -R a+rX "$tmp"
 
 rm -rf "$old" 2>/dev/null || fail "quedó $old de una corrida anterior y no se puede borrar; borralo a mano"
