@@ -10,6 +10,7 @@ import {
   fontsUsed,
   LANGS,
   normalizeBaseUrl,
+  parseBbox,
   parseCenter,
   parseRegionName,
   parseZoom,
@@ -22,6 +23,7 @@ const base: Omit<StyleOptions, "variant" | "lang"> = {
   baseUrl: "https://tiles.example.com/v0.1.0/",
   region: "roldanillo",
   center: [-76.1547, 4.4128],
+  bounds: [-76.3, 4.3, -76.0, 4.55],
   zoom: 13.5,
   version: "0.1.0",
   protomapsBuild: "20260928",
@@ -72,6 +74,7 @@ describe("estructura", () => {
         },
         { version: "0.1.0", base: "https://tiles.example.com/v0.1.0", build: "20260928" },
       );
+      assert.deepEqual((style.metadata as Record<string, unknown>)["veni:bounds"], [-76.3, 4.3, -76.0, 4.55]);
     });
 
     it(`${key} lleva la atribución de OpenStreetMap`, () => {
@@ -257,6 +260,14 @@ describe("entradas", () => {
   for (const bad of ["0x10,5", "-176.1,95", "4.41", "4.41,-76.15,1", "a,b", "", "1e2,3"]) {
     it(`centro: rechaza '${bad}'`, () => {
       assert.throws(() => parseCenter(bad), /REGION_CENTER/);
+    });
+  }
+  it("caja: acepta oeste,sur,este,norte", () => {
+    assert.deepEqual(parseBbox("-76.30,4.30,-76.00,4.55"), [-76.3, 4.3, -76, 4.55]);
+  });
+  for (const bad of ["-76.00,4.30,-76.30,4.55", "-76.30,4.55,-76.00,4.30", "-76.3,4.3,-76", "a,b,c,d", "-190,4.3,-76,4.55"]) {
+    it(`caja: rechaza '${bad}'`, () => {
+      assert.throws(() => parseBbox(bad), /REGION_BBOX/);
     });
   }
   for (const bad of ["0x10", "23", "-1", "", "13,5"]) {
