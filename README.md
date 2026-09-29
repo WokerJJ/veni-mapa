@@ -19,6 +19,7 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | `assets` | Descarga las fuentes y los sprites de [`config/assets.lock`](config/assets.lock) (fijados por commit y verificados por SHA-256) y genera en `build/assets` los glyphs de [`config/fontstacks.yml`](config/fontstacks.yml) con [font-maker](https://github.com/maplibre/font-maker). |
 | `style` | Genera `build/style/veni-{claro,oscuro}-{es,en}.json` con la marca Vení. `STYLE_BASE_URL` fija dónde se publican PMTiles, glyphs y sprites (por defecto `http://localhost:8080`). |
 | `check` | Verificación de tipos (TypeScript) y pruebas de Node: estilos, `build.ts` y servidor. |
+| `licenses` | Regenera `licenses/vendor-deps.txt` con los avisos de lo que MapLibre GL y PMTiles empaquetan (`make check` falla si quedó desactualizado). |
 | `site` | Arma `build/site`, el árbol que se publica: demo, PMTiles, recursos, estilos y licencias. |
 | `serve` | Sirve `build/site` en <http://localhost:8080> con rangos HTTP. Necesita el puerto: `docker compose run --rm --service-ports tools make serve`. |
 | `all` | `extract`, `assets`, `style` y `site`. |
@@ -41,7 +42,9 @@ La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los t
 
 <https://wokerjj.github.io/veni-mapa/> · la publica [`pages.yml`](.github/workflows/pages.yml) en cada cambio en `main`.
 
-MapLibre GL y PMTiles autohospedados (sin CDN), botones para tema claro u oscuro y etiquetas en español o inglés, con la interfaz traducida. El tema y el idioma quedan en la URL (`?tema=oscuro&idioma=en`) y la vista en el fragmento (`#vista=zoom/lat/lon`). Sin tema en la URL sigue la preferencia del sistema. Detalles de publicación y rangos HTTP en [docs/PUBLICACION.md](docs/PUBLICACION.md).
+MapLibre GL y PMTiles autohospedados (sin CDN), botones para tema claro u oscuro y etiquetas en español o inglés, con la interfaz traducida. Lo que elegís queda en la URL (`?tema=oscuro&idioma=en`) y la vista en el fragmento (`#vista=zoom/lat/lon`); sin tema elegido, la demo sigue la preferencia del sistema, también si cambia. Los controles de MapLibre también se traducen.
+
+La cámara no sale de la región: el extracto guarda tiles enteros y en zooms bajos un tile cubre medio continente (en el zoom 0, el planeta), así que el estilo publica la caja de `config/region.yml` en `metadata["veni:bounds"]` y la demo la usa como `maxBounds`. La app hace lo mismo. Detalles de publicación y rangos HTTP en [docs/PUBLICACION.md](docs/PUBLICACION.md).
 
 ## Estilos
 
