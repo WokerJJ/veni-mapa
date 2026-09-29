@@ -9,7 +9,7 @@ ARG FONT_MAKER_COMMIT=714ccaea67d384717890a3c2c27143dfdd4189b7
 # misma libc y la misma FreeType. Declaradas antes del primer FROM, estas
 # variables valen en todos los FROM. Para actualizarlas, ver "Actualizar la
 # imagen de herramientas" en el README.
-ARG ALPINE_VERSION=3.22
+ARG ALPINE_VERSION=3.24
 ARG NODE_MAJOR=24
 
 # go-pmtiles publica un binario estático; se copia a una imagen con shell.
