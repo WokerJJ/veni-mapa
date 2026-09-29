@@ -4,9 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-  # Lo lanza release.yml sobre la rama del PR de release: los PR que abre
-  # GITHUB_TOKEN no disparan el evento pull_request.
-  workflow_dispatch:
 
 permissions:
   contents: read

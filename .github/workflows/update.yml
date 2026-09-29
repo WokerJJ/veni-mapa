@@ -24,6 +24,8 @@ concurrency:
 
 env:
   BRANCH: chore/actualizar-extracto
+  # GitHub App opcional para abrir el PR con otra identidad (ver release.yml).
+  RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
 
 jobs:
   update:
@@ -108,9 +110,20 @@ jobs:
             --build build/build.json --pmtiles "build/$REGION.pmtiles" \
             --data data/build.json --report build/update-report.md $PREVIOUS_ARGS >build/title.txt
           cat build/update-report.md >>"$GITHUB_STEP_SUMMARY"
+      # Con la GitHub App (ver release.yml) el PR se abre con otra identidad y la
+      # CI corre sola; con GITHUB_TOKEN sus workflows esperan "Approve and run".
+      - name: Token de la GitHub App
+        id: app
+        if: env.RELEASE_APP_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ env.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - name: PR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
         run: |
           set -euo pipefail
           if git diff --quiet -- data/build.json; then
