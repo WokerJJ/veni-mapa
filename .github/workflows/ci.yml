@@ -75,17 +75,49 @@ jobs:
           load: true
           cache-from: type=gha,scope=tools
           cache-to: type=gha,scope=tools,mode=max
-      - name: Pruebas en la imagen
-        run: |
-          for test in tests/*_test.sh; do
-            echo "::group::$test"
-            docker compose run --rm tools bash "$test"
-            echo "::endgroup::"
-          done
       - name: make help y make clean funcionan sin generar la región
         run: |
           docker compose run --rm tools make help | grep -q '^Uso:'
           docker compose run --rm tools make clean
+      # Las descargas de fuentes y sprites solo cambian cuando cambia el lock.
+      # assets.sh vuelve a verificar el SHA-256 de lo restaurado.
+      - name: Caché de recursos de terceros
+        uses: actions/cache@v6
+        with:
+          path: build/cache/assets
+          key: assets-${{ hashFiles('config/assets.lock') }}
+      - name: make assets
+        run: docker compose run --rm tools make assets
+      # Sin red: las pruebas usan índices y recursos locales. La prueba completa
+      # de assets.sh usa las fuentes que dejó make assets, y aquí no puede omitirse.
+      - name: Pruebas en la imagen
+        run: |
+          for test in tests/*_test.sh; do
+            echo "::group::$test"
+            docker compose run --rm -e ASSETS_TEST_REQUIRE_FULL=1 tools bash "$test"
+            echo "::endgroup::"
+          done
+      - name: Verificación de los recursos
+        shell: bash
+        run: |
+          set -euo pipefail
+          # font-maker escribe los 256 rangos aunque estén vacíos: se verifica
+          # contenido. El cirílico (1024-1279) solo lo aporta el respaldo de Noto.
+          mapfile -t stacks < <(yq -r 'keys[]' config/fontstacks.yml)
+          test "${#stacks[@]}" -gt 0
+          for stack in "${stacks[@]}"; do
+            bytes="$(stat -c %s "build/assets/fonts/$stack/1024-1279.pbf")"
+            echo "$stack: rango cirílico de $bytes bytes"
+            test "$bytes" -gt 1024
+          done
+          for sprite in light light@2x dark dark@2x; do
+            jq -e 'length > 0' "build/assets/sprites/$sprite.json" >/dev/null
+            test -s "build/assets/sprites/$sprite.png"
+          done
+          for license in licenses/*.txt; do
+            cmp "$license" "build/assets/licenses/$(basename "$license")"
+          done
+          jq -e '.glyphs_sha256 | test("^[0-9a-f]{64}$")' build/assets/assets.json
       - name: make extract
         run: docker compose run --rm tools make extract
       - name: Verificación del extracto
@@ -105,6 +137,11 @@ jobs:
             build/*.pmtiles
             build/extract-report.txt
             build/build.json
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        with:
+          name: recursos
+          path: build/assets
           retention-days: 7
 
   # Único check obligatorio en la protección de main: agrega el resultado de

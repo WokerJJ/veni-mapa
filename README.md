@@ -16,7 +16,7 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | Objetivo | Qué hace |
 | --- | --- |
 | `extract` | Resuelve la build diaria más reciente de Protomaps, corre `pmtiles extract --dry-run` (reporte en `build/extract-report.txt`) y extrae la región a `build/<región>.pmtiles`. Deja la procedencia (build, bbox, tamaño, SHA-256) en `build/build.json`. |
-| `assets` | Glyphs y sprites autohospedados. |
+| `assets` | Descarga las fuentes y los sprites de [`config/assets.lock`](config/assets.lock) (fijados por commit y verificados por SHA-256) y genera en `build/assets` los glyphs de [`config/fontstacks.yml`](config/fontstacks.yml) con [font-maker](https://github.com/maplibre/font-maker). |
 | `style` | Estilos MapLibre claro y oscuro, en español e inglés. |
 | `serve` | Sirve la demo en local. |
 | `all` | `extract`, `assets` y `style`. |
@@ -31,7 +31,36 @@ La misma build produce siempre el mismo archivo (mismo SHA-256 en `build/build.j
 
 En Linux, el contenedor corre con tu usuario para que `build/` no quede de root: exportá `HOST_UID=$(id -u)` y `HOST_GID=$(id -g)` si tu uid no es 1000.
 
+Si tu `build/` lo creó una versión anterior de la imagen (que corría como root) y ves `Permission denied`, borralo una vez con `docker compose run --rm --user 0:0 tools rm -rf build`.
+
 La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los tiles de la región (unos 1,6 MB hoy).
+
+## Tipografías y sprites
+
+El estilo usa las tipografías de la marca Vení, servidas desde el mismo lugar que el mapa (sin CDNs de terceros):
+
+| Fontstack | Uso | Respaldo incluido |
+| --- | --- | --- |
+| `Figtree Regular` | Etiquetas generales | Noto Sans Regular |
+| `Figtree SemiBold` | Vías principales y barrios | Noto Sans SemiBold |
+| `Figtree Italic` | Agua | Noto Sans Italic |
+| `Bricolage Grotesque Bold` | Lugares destacados | Noto Sans Bold |
+
+Un hosting estático no puede combinar fuentes al vuelo, así que font-maker mete el respaldo de Noto Sans dentro de cada fontstack: lo que Figtree o Bricolage no cubren (griego, cirílico, Latin extendido) sale de Noto. Los sprites son los de [protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets) (v4, claro y oscuro). Licencias en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### Actualizar recursos de terceros
+
+Las fuentes y los sprites están fijados en [`config/assets.lock`](config/assets.lock) por commit y SHA-256. Para subir de versión uno de ellos:
+
+1. Cambiá el commit en su URL (de `raw.githubusercontent.com/<repo>/<commit>/…`).
+2. Calculá el hash del archivo nuevo y reemplazalo en la misma línea:
+   ```bash
+   curl -fsSL <url> | sha256sum
+   ```
+3. Si cambia la licencia, actualizá su texto en [`licenses/`](licenses/) y [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+4. Corré `docker compose run --rm tools make assets` y las pruebas.
+
+font-maker se fija en `FONT_MAKER_COMMIT` del [Dockerfile](docker/tools/Dockerfile). Dependabot no vigila ninguno de los dos: se revisan a mano. `build/assets/assets.json` registra con qué lock, fontstacks, commit de font-maker y versión de FreeType se generó cada juego de glyphs.
 
 ## Región
 

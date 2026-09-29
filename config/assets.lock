@@ -1,0 +1,23 @@
+# Recursos de terceros que descarga `make assets`, fijados por commit y SHA-256.
+# Si un archivo cambia en origen, la verificación falla en vez de colarse.
+# Para actualizar una línea: ver "Actualizar recursos de terceros" en el README.
+# Formato: <sha256>  <destino en build/cache/assets>  <url>
+#
+# Fuentes: Figtree y Bricolage Grotesque (marca Vení) y Noto Sans (respaldo),
+# todas bajo SIL OFL 1.1. Sprites: protomaps/basemaps-assets v4 (MIT).
+448d74e778cc9774db27bd86cf451bba982b2e4dc348f610390eb6e3439cf6ca  fonts/Figtree-Regular.ttf  https://raw.githubusercontent.com/erikdkennedy/figtree/032dfa7fe219ef3a02890d6d3add84eacc9aebfe/fonts/ttf/Figtree-Regular.ttf
+35fc4508d627f8402a7d5ae91d842d1adb36846eea902c0a849642afecd0ac74  fonts/Figtree-SemiBold.ttf  https://raw.githubusercontent.com/erikdkennedy/figtree/032dfa7fe219ef3a02890d6d3add84eacc9aebfe/fonts/ttf/Figtree-SemiBold.ttf
+462e367f49de2d2b09b712be18a4026c66f196455388d904f1038e8d1c859e11  fonts/Figtree-Italic.ttf  https://raw.githubusercontent.com/erikdkennedy/figtree/032dfa7fe219ef3a02890d6d3add84eacc9aebfe/fonts/ttf/Figtree-Italic.ttf
+f83cb3f1ddb91bdb02868eeddb4f817b326aef993f96fe6f8a3b40b0f31c689b  fonts/BricolageGrotesque-Bold.ttf  https://raw.githubusercontent.com/ateliertriay/bricolage/84745e5b96261ae5f8c6c856e262fe78d1d6efdd/fonts/ttf/BricolageGrotesque-Bold.ttf
+f3961a9cde016d41a4879aecda1474d3a36d6bf54fa0e4643de029cc2248b0e8  fonts/NotoSans-Regular.ttf  https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSans/unhinted/ttf/NotoSans-Regular.ttf
+a7af8d4a11e8e49fea9a19786a6469210b512cd4061413e8036bdd2425722795  fonts/NotoSans-SemiBold.ttf  https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSans/unhinted/ttf/NotoSans-SemiBold.ttf
+678288f868807d4d64a6f3b51466871d117d915780381ce9d0ed4b3bcbd06d37  fonts/NotoSans-Italic.ttf  https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSans/unhinted/ttf/NotoSans-Italic.ttf
+87cb2d84472a7d66da659ee47b6cdb9552326e8c128245231f191b6ac72529d9  fonts/NotoSans-Bold.ttf  https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSans/unhinted/ttf/NotoSans-Bold.ttf
+bfac76cf7ed5c2aa2992695904056a1c6b07785b7fd20e6c640cb44fd6244a2e  sprites/light.json  https://raw.githubusercontent.com/protomaps/basemaps-assets/028c18f713baecad011301ff7a69acc39bcc2ae7/sprites/v4/light.json
+b6a34640917bdc57d0bd080836db33376371a3312ebe7b849045268015de3481  sprites/light.png  https://raw.githubusercontent.com/protomaps/basemaps-assets/028c18f713baecad011301ff7a69acc39bcc2ae7/sprites/v4/light.png
+1fb5b123fbe35d2e1f6ac171513ce01df89e671273a417ee89c44886a4c132f0  sprites/light@2x.json  https://raw.githubusercontent.com/protomaps/basemaps-assets/028c18f713baecad011301ff7a69acc39bcc2ae7/sprites/v4/light@2x.json
+23f6e9df27c2e9a14385763980a24e3608966bfc8192a106058bc2ca959ab563  sprites/light@2x.png  https://raw.githubusercontent.com/protomaps/basemaps-assets/028c18f713baecad011301ff7a69acc39bcc2ae7/sprites/v4/light@2x.png
+bfac76cf7ed5c2aa2992695904056a1c6b07785b7fd20e6c640cb44fd6244a2e  sprites/dark.json  https://raw.githubusercontent.com/protomaps/basemaps-assets/028c18f713baecad011301ff7a69acc39bcc2ae7/sprites/v4/dark.json
+8920f68e8f9f7a4188da43e62a81bbc426532579fff7b5f27aad09e130f4246e  sprites/dark.png  https://raw.githubusercontent.com/protomaps/basemaps-assets/028c18f713baecad011301ff7a69acc39bcc2ae7/sprites/v4/dark.png
+1fb5b123fbe35d2e1f6ac171513ce01df89e671273a417ee89c44886a4c132f0  sprites/dark@2x.json  https://raw.githubusercontent.com/protomaps/basemaps-assets/028c18f713baecad011301ff7a69acc39bcc2ae7/sprites/v4/dark@2x.json
+6e01b4e366d304f27bbd55390511a3d4e39aa1d03eb3e82f873f7ea32e74cbe4  sprites/dark@2x.png  https://raw.githubusercontent.com/protomaps/basemaps-assets/028c18f713baecad011301ff7a69acc39bcc2ae7/sprites/v4/dark@2x.png
