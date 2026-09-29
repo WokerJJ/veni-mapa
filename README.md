@@ -48,6 +48,20 @@ El estilo usa las tipografías de la marca Vení, servidas desde el mismo lugar 
 
 Un hosting estático no puede combinar fuentes al vuelo, así que font-maker mete el respaldo de Noto Sans dentro de cada fontstack: lo que Figtree o Bricolage no cubren (griego, cirílico, Latin extendido) sale de Noto. Los sprites son los de [protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets) (v4, claro y oscuro). Licencias en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+### Actualizar recursos de terceros
+
+Las fuentes y los sprites están fijados en [`config/assets.lock`](config/assets.lock) por commit y SHA-256. Para subir de versión uno de ellos:
+
+1. Cambiá el commit en su URL (de `raw.githubusercontent.com/<repo>/<commit>/…`).
+2. Calculá el hash del archivo nuevo y reemplazalo en la misma línea:
+   ```bash
+   curl -fsSL <url> | sha256sum
+   ```
+3. Si cambia la licencia, actualizá su texto en [`licenses/`](licenses/) y [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+4. Corré `docker compose run --rm tools make assets` y las pruebas.
+
+font-maker se fija en `FONT_MAKER_COMMIT` del [Dockerfile](docker/tools/Dockerfile). Dependabot no vigila ninguno de los dos: se revisan a mano. `build/assets/assets.json` registra con qué lock, fontstacks, commit de font-maker y versión de FreeType se generó cada juego de glyphs.
+
 ## Región
 
 La región se define en un solo archivo, [`config/region.yml`](config/region.yml): la caja delimitadora (oeste, sur, este, norte, en WGS84) que cubre el casco urbano de Roldanillo y sus veredas, el zoom máximo y la vista inicial de la demo. `scripts/region.sh` valida el archivo y lo expone como variables de `make`, así ningún otro archivo repite esos valores.

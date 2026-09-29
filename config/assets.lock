@@ -1,5 +1,6 @@
 # Recursos de terceros que descarga `make assets`, fijados por commit y SHA-256.
 # Si un archivo cambia en origen, la verificación falla en vez de colarse.
+# Para actualizar una línea: ver "Actualizar recursos de terceros" en el README.
 # Formato: <sha256>  <destino en build/cache/assets>  <url>
 #
 # Fuentes: Figtree y Bricolage Grotesque (marca Vení) y Noto Sans (respaldo),

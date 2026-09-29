@@ -15,10 +15,10 @@ Componentes de terceros que usa o redistribuye este repositorio. Cada uno conser
 | --- | --- | --- | --- |
 | Figtree | Glyphs `Figtree Regular`, `Figtree SemiBold`, `Figtree Italic` | [erikdkennedy/figtree](https://github.com/erikdkennedy/figtree) | SIL OFL 1.1 · [texto](licenses/Figtree-OFL.txt) |
 | Bricolage Grotesque | Glyphs `Bricolage Grotesque Bold` | [ateliertriay/bricolage](https://github.com/ateliertriay/bricolage) | SIL OFL 1.1 · [texto](licenses/BricolageGrotesque-OFL.txt) |
-| Noto Sans | Respaldo dentro de cada fontstack (griego, cirílico, Latin extendido) | [notofonts](https://github.com/notofonts/notofonts.github.io) | SIL OFL 1.1 · [texto](licenses/NotoSans-OFL.txt) |
+| Noto Sans | Respaldo dentro de cada fontstack (griego, cirílico, Latin extendido) | [notofonts/latin-greek-cyrillic](https://github.com/notofonts/latin-greek-cyrillic) (TTF de [notofonts.github.io](https://github.com/notofonts/notofonts.github.io)) | SIL OFL 1.1 · [texto](licenses/NotoSans-OFL.txt) |
 | Sprites de Protomaps (v4) | Íconos del mapa, claro y oscuro | [protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets), derivados de [tangrams/icons](https://github.com/tangrams/icons) | MIT · [texto](licenses/protomaps-sprites-MIT.txt) |
 
-Los glyphs PBF son una conversión de las fuentes: se distribuyen bajo la misma OFL, con sus nombres originales, y no se venden por separado.
+Cada fontstack combina la fuente de marca con Noto Sans: según la OFL es una **versión modificada**, y se distribuye bajo la misma OFL. Ninguna de las tres fuentes declara un Reserved Font Name, por eso los fontstacks conservan el nombre de la fuente de marca. Los textos de licencia viajan con los recursos (`build/assets/licenses/`) y `build/assets/assets.json` registra qué fuentes combina cada fontstack.
 
 ## Herramientas (no se redistribuyen)
 
