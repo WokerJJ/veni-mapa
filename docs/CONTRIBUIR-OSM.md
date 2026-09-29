@@ -16,7 +16,7 @@ Lo que más le sirve a la app, en orden:
 
 ### Nombres en inglés (`name:en`)
 
-El estilo en inglés muestra `name:en` y, si no existe, el nombre local (`name`). Solo agregá `name:en` cuando el lugar **tiene de verdad** un nombre en inglés en uso, por ejemplo `Colombia` o `Cauca River` para el río Cauca. No traduzcas nombres propios: "Restaurante La Fonda" no se convierte en "The Inn Restaurant", y "Calle 7" no pasa a ser "7th Street". Inventar traducciones va contra las reglas de OSM y, en el mapa, es peor que mostrar el nombre local.
+El estilo en inglés muestra `name:en` y, si no existe, el nombre local (`name`). Solo agregá `name:en` cuando el lugar **tiene de verdad** un nombre en inglés en uso, como pasa con países o accidentes geográficos grandes (el mar Caribe es `Caribbean Sea`). En Roldanillo casi nunca hace falta. No traduzcas nombres propios: "Restaurante La Fonda" no se convierte en "The Inn Restaurant", y "Calle 7" no pasa a ser "7th Street". Inventar traducciones va contra las reglas de OSM y, en el mapa, es peor que mostrar el nombre local.
 
 ## Con qué editar
 
@@ -34,9 +34,9 @@ Para editar se necesita una cuenta gratuita en [openstreetmap.org](https://www.o
 - **Mapeá lo que existe en el terreno.** No agregues negocios cerrados, planes futuros ni datos "de memoria" que no estés seguro.
 - **Escribí un comentario claro en cada conjunto de cambios**, por ejemplo "Horarios de restaurantes del parque principal de Roldanillo (verificados en persona)".
 - **No edites para la app.** OSM describe el mundo, no a Vení: nada de etiquetas inventadas ni de publicidad en `name` ("La Fonda — ¡el mejor almuerzo!").
-- **Si no sabés cómo etiquetar algo**, buscalo en la [wiki de OSM](https://wiki.openstreetmap.org/wiki/ES:Portada) o preguntá en la [comunidad de OSM Colombia](https://community.openstreetmap.org/c/communities/co/).
+- **Si no sabés cómo etiquetar algo**, buscalo en la [wiki de OSM](https://wiki.openstreetmap.org/wiki/ES:P%C3%A1gina_principal) o preguntá en la [comunidad de OSM Colombia](https://community.openstreetmap.org/c/communities/co/).
 
-Guías oficiales: [Cómo contribuir](https://wiki.openstreetmap.org/wiki/ES:C%C3%B3mo_contribuir) y [Fuentes de datos permitidas](https://wiki.openstreetmap.org/wiki/ES:Copyright).
+Guías oficiales: [Cómo contribuir](https://wiki.openstreetmap.org/wiki/ES:C%C3%B3mo_contribuir) y [Derechos de autor y licencia](https://www.openstreetmap.org/copyright/es).
 
 ## Cuándo aparece el cambio en el mapa
 
