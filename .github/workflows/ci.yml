@@ -22,6 +22,14 @@ jobs:
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
+      # En Windows git no registra permisos: un script nuevo puede llegar sin
+      # bit de ejecución y fallar solo en Linux.
+      - name: Scripts ejecutables
+        run: |
+          if git ls-files -s 'scripts/*.sh' 'tests/*_test.sh' | grep -v '^100755'; then
+            echo "::error::Scripts sin bit de ejecución: git update-index --chmod=+x <archivo>"
+            exit 1
+          fi
 
   region:
     name: Región (config/region.yml)
