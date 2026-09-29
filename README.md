@@ -124,6 +124,8 @@ font-maker se fija en `FONT_MAKER_COMMIT` del [Dockerfile](docker/tools/Dockerfi
 | `manifest.json` | Versión, build de Protomaps, bbox, zoom máximo, base de los estilos, atribución y cada archivo con tamaño y SHA-256. |
 | `SHA256SUMS` | Sumas de todo lo anterior: `sha256sum -c SHA256SUMS`. |
 
+Si existen los secrets de R2, la release también se publica en `https://tiles.veniroldanillo.co/vX.Y.Z/` y `/latest/`; hoy está preparado y desactivado (ver [docs/PUBLICACION.md](docs/PUBLICACION.md#cloudflare-r2-producción)).
+
 Para la app, `manifest.json` es la entrada: dice qué build de OpenStreetMap trae la versión y cómo verificar cada archivo. Antes de 1.0, `feat` sube la versión menor y `fix` la de parche.
 
 Requisito del repositorio: *Settings → Actions → General → Workflow permissions →* **Allow GitHub Actions to create and approve pull requests**. Sin eso release-please falla al abrir el PR de release.
@@ -140,7 +142,7 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 
 | Qué | Cómo | Dónde corre |
 | --- | --- | --- |
-| Scripts del pipeline (región, extracción, recursos, sitio, verificación, release) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
+| Scripts del pipeline (región, extracción, recursos, sitio, verificación, release, publicación en R2) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
 | Generador de estilos, `build.ts`, servidor y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
 | Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
@@ -152,7 +154,7 @@ La CI corre todo lo anterior en cada PR; las suites no pueden quedar omitidas, u
 ## Documentación
 
 - [docs/BITACORA.md](docs/BITACORA.md): diario de avance.
-- [docs/PUBLICACION.md](docs/PUBLICACION.md): dónde se publica el mapa y requisitos de rangos HTTP.
+- [docs/PUBLICACION.md](docs/PUBLICACION.md): dónde se publica el mapa (Pages, R2), requisitos de rangos HTTP y cómo activar R2.
 - [CONTRIBUTING.md](CONTRIBUTING.md): flujo de trabajo, ramas y commits.
 
 ## Licencia y atribución
