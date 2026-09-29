@@ -1,0 +1,130 @@
+/* Demo del mapa · tokens de la marca Vení (brand/tokens.css de veni-roldanillo). */
+:root {
+  --ciruela: #2a1638;
+  --ciruela-suave: #6a5578;
+  --arrebol: #f0525a;
+  --mango: #f7a93b;
+  --lila: #f3ecf6;
+  --blanco: #ffffff;
+  --tactil: 44px;
+  --radio: 14px;
+  --texto: system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--texto);
+  background: var(--lila);
+  color: var(--ciruela);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 8px 16px;
+  background: var(--ciruela);
+  color: var(--lila);
+}
+
+.marca {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.marca span {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-inline-start: 6px;
+  color: var(--lila);
+}
+
+.controles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.grupo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.etiqueta {
+  font-size: 0.875rem;
+  margin-inline-end: 4px;
+}
+
+.grupo button {
+  min-width: var(--tactil);
+  min-height: var(--tactil);
+  padding: 0 14px;
+  border: 2px solid var(--lila);
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--lila);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.grupo button[aria-pressed="true"] {
+  background: var(--lila);
+  color: var(--ciruela);
+}
+
+.grupo button:focus-visible {
+  outline: 3px solid var(--mango);
+  outline-offset: 2px;
+}
+
+/* En pantallas angostas los botones ya dicen qué hacen: las etiquetas quedan
+   solo para lectores de pantalla y los dos grupos entran en una fila. */
+@media (max-width: 480px) {
+  .barra {
+    padding: 8px 12px;
+  }
+  .etiqueta {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.principal {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+#mapa {
+  flex: 1;
+}
+
+.aviso {
+  padding: 16px;
+}
+
+/* Atribución siempre visible y legible (ODbL exige mostrarla). */
+.maplibregl-ctrl-attrib {
+  font-size: 0.8125rem;
+}

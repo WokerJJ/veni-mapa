@@ -2,7 +2,7 @@
 //
 // Lee del entorno (el Makefile exporta los valores de config/region.yml y fija
 // los valores por defecto; aquí no se repiten):
-//   REGION_NAME, REGION_CENTER ("lon,lat"), REGION_ZOOM
+//   REGION_NAME, REGION_BBOX ("oeste,sur,este,norte"), REGION_CENTER ("lon,lat"), REGION_ZOOM
 //   STYLE_BASE_URL  URL absoluta donde se publican PMTiles, glyphs y sprites
 //   STYLE_VERSION   versión que queda en los metadatos
 //   BUILD_DIR       carpeta de salida
@@ -16,6 +16,7 @@ import {
   buildStyle,
   LANGS,
   normalizeBaseUrl,
+  parseBbox,
   parseCenter,
   parseRegionName,
   parseZoom,
@@ -43,6 +44,7 @@ function parse<T>(fn: () => T): T {
 
 const buildDir = env("BUILD_DIR");
 const region = parse(() => parseRegionName(env("REGION_NAME")));
+const bounds = parse(() => parseBbox(env("REGION_BBOX")));
 const center = parse(() => parseCenter(env("REGION_CENTER")));
 const zoom = parse(() => parseZoom(env("REGION_ZOOM")));
 const baseUrl = parse(() => normalizeBaseUrl(env("STYLE_BASE_URL")));
@@ -62,7 +64,7 @@ const staging = mkdtempSync(join(buildDir, ".style."));
 try {
   for (const variant of VARIANTS) {
     for (const lang of LANGS) {
-      const style = buildStyle({ variant, lang, baseUrl, region, center, zoom, version, protomapsBuild });
+      const style = buildStyle({ variant, lang, baseUrl, region, center, bounds, zoom, version, protomapsBuild });
       const file = `veni-${variant}-${lang}.json`;
       writeFileSync(join(staging, file), `${JSON.stringify(style, null, 2)}\n`);
       console.log(`==> ${file} (${style.layers.length} capas)`);

@@ -13,6 +13,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 const validEnv = {
   BUILD_DIR: dir,
   REGION_NAME: "roldanillo",
+  REGION_BBOX: "-76.30,4.30,-76.00,4.55",
   REGION_CENTER: "-76.1547,4.4128",
   REGION_ZOOM: "13.5",
   STYLE_BASE_URL: "https://tiles.example.com/v9/",
@@ -42,6 +43,7 @@ describe("build.ts", () => {
     const style = JSON.parse(readFileSync(styleFile("veni-claro-es.json"), "utf8"));
     assert.equal(style.glyphs, "https://tiles.example.com/v9/fonts/{fontstack}/{range}.pbf");
     assert.deepEqual(style.center, [-76.1547, 4.4128]);
+    assert.deepEqual(style.metadata["veni:bounds"], [-76.3, 4.3, -76, 4.55]);
     assert.equal(style.metadata["veni:version"], "9.9.9");
     assert.equal(style.metadata["veni:protomaps_build"], "20260928");
     assert.match(result.stdout, /base https:\/\/tiles\.example\.com\/v9,/);
@@ -54,6 +56,7 @@ describe("build.ts", () => {
 
   for (const [name, overrides, message] of [
     ["centro inválido", { REGION_CENTER: "4.41,-176.15" }, /REGION_CENTER/],
+    ["caja inválida", { REGION_BBOX: "-76.00,4.30,-76.30,4.55" }, /REGION_BBOX/],
     ["zoom inválido", { REGION_ZOOM: "0x10" }, /REGION_ZOOM/],
     ["región inválida", { REGION_NAME: "a b?x" }, /REGION_NAME/],
     ["URL con credenciales", { STYLE_BASE_URL: "https://u:p@tiles.example.com" }, /usuario ni contraseña/],

@@ -7,6 +7,9 @@ services:
     # Corre con el usuario del host para que build/ no quede de root en Linux.
     # En Docker Desktop (Windows, macOS) el valor por defecto sirve igual.
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # Solo lo usa `make serve`, con: docker compose run --rm --service-ports tools make serve
+    ports:
+      - "127.0.0.1:8080:8080"
     volumes:
       - .:/work
       - node_modules:/work/node_modules

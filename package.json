@@ -11,13 +11,15 @@
   "scripts": {
     "style": "node scripts/style/build.ts",
     "typecheck": "tsc -p .",
-    "test": "node --test \"tests/style/*.test.ts\""
+    "test": "node --test \"tests/node/*.test.ts\""
   },
   "devDependencies": {
     "@maplibre/maplibre-gl-style-spec": "26.4.4",
     "@protomaps/basemaps": "5.7.2",
     "@types/geojson": "7946.0.16",
     "@types/node": "24.19.0",
+    "maplibre-gl": "6.11.2",
+    "pmtiles": "4.5.0",
     "typescript": "7.0.2"
   }
 }

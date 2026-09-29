@@ -18,9 +18,11 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | `extract` | Resuelve la build diaria más reciente de Protomaps, corre `pmtiles extract --dry-run` (reporte en `build/extract-report.txt`) y extrae la región a `build/<región>.pmtiles`. Deja la procedencia (build, bbox, tamaño, SHA-256) en `build/build.json`. |
 | `assets` | Descarga las fuentes y los sprites de [`config/assets.lock`](config/assets.lock) (fijados por commit y verificados por SHA-256) y genera en `build/assets` los glyphs de [`config/fontstacks.yml`](config/fontstacks.yml) con [font-maker](https://github.com/maplibre/font-maker). |
 | `style` | Genera `build/style/veni-{claro,oscuro}-{es,en}.json` con la marca Vení. `STYLE_BASE_URL` fija dónde se publican PMTiles, glyphs y sprites (por defecto `http://localhost:8080`). |
-| `check` | Verificación de tipos (TypeScript) y pruebas del generador de estilos. |
-| `serve` | Sirve la demo en local *(pendiente, #7)*. |
-| `all` | `extract`, `assets` y `style`. |
+| `check` | Verificación de tipos (TypeScript) y pruebas de Node: estilos, `build.ts` y servidor. |
+| `licenses` | Regenera `licenses/vendor-deps.txt` con los avisos de lo que MapLibre GL y PMTiles empaquetan (`make check` falla si quedó desactualizado). |
+| `site` | Arma `build/site`, el árbol que se publica: demo, PMTiles, recursos, estilos y licencias. |
+| `serve` | Sirve `build/site` en <http://localhost:8080> con rangos HTTP. Necesita el puerto: `docker compose run --rm --service-ports tools make serve`. |
+| `all` | `extract`, `assets`, `style` y `site`. |
 
 Para reproducir una versión exacta, fijá la build (funciona igual en bash y en PowerShell):
 
@@ -35,6 +37,14 @@ En Linux, el contenedor corre con tu usuario para que `build/` no quede de root:
 Si tu `build/` lo creó una versión anterior de la imagen (que corría como root) y ves `Permission denied`, borralo una vez con `docker compose run --rm --user 0:0 tools rm -rf build`.
 
 La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los tiles de la región (unos 1,6 MB hoy).
+
+## Demo
+
+<https://wokerjj.github.io/veni-mapa/> · la publica [`pages.yml`](.github/workflows/pages.yml) en cada cambio en `main`.
+
+MapLibre GL y PMTiles autohospedados (sin CDN), botones para tema claro u oscuro y etiquetas en español o inglés, con la interfaz traducida. Lo que elegís queda en la URL (`?tema=oscuro&idioma=en`) y la vista en el fragmento (`#vista=zoom/lat/lon`); sin tema elegido, la demo sigue la preferencia del sistema, también si cambia. Los controles de MapLibre también se traducen.
+
+La cámara no sale de la región: el extracto guarda tiles enteros y en zooms bajos un tile cubre medio continente (en el zoom 0, el planeta), así que el estilo publica la caja de `config/region.yml` en `metadata["veni:bounds"]` y la demo la usa como `maxBounds`. La app hace lo mismo. Detalles de publicación y rangos HTTP en [docs/PUBLICACION.md](docs/PUBLICACION.md).
 
 ## Estilos
 
@@ -109,6 +119,7 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 ## Documentación
 
 - [docs/BITACORA.md](docs/BITACORA.md): diario de avance.
+- [docs/PUBLICACION.md](docs/PUBLICACION.md): dónde se publica el mapa y requisitos de rangos HTTP.
 - [CONTRIBUTING.md](CONTRIBUTING.md): flujo de trabajo, ramas y commits.
 
 ## Licencia y atribución

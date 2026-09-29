@@ -19,8 +19,8 @@ STYLE_VERSION ?= dev
 
 # Los valores de la región salen de config/region.yml. make regenera
 # build/region.mk cuando cambia el YAML y lo vuelve a leer antes de seguir.
-# help, clean y assets no lo necesitan: funcionan aunque el YAML esté roto.
-NO_REGION_GOALS := help clean assets check
+# help, clean, assets, check, licenses y serve no lo necesitan: funcionan aunque el YAML esté roto.
+NO_REGION_GOALS := help clean assets check licenses serve
 ifneq ($(filter-out $(NO_REGION_GOALS),$(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))),)
 include $(BUILD_DIR)/region.mk
 endif
@@ -32,7 +32,7 @@ $(BUILD_DIR)/region.mk: config/region.yml scripts/region.sh
 
 export REGION_NAME REGION_BBOX REGION_MAXZOOM REGION_CENTER REGION_ZOOM BUILD_DIR BUILD_DATE STYLE_BASE_URL STYLE_VERSION
 
-.PHONY: help all extract style assets serve check clean
+.PHONY: help all extract style assets site serve check licenses clean
 
 help: ## Muestra esta ayuda
 	@echo "Uso: docker compose run --rm tools make <objetivo>"
@@ -41,7 +41,7 @@ help: ## Muestra esta ayuda
 	@echo
 	@echo "Variables: make extract BUILD_DATE=AAAAMMDD fija la build de Protomaps (por defecto, la más reciente)."
 
-all: extract assets style ## Genera todo: extracto, recursos y estilos
+all: extract assets style site ## Genera todo: extracto, recursos, estilos y sitio
 
 extract: ## Extrae la región a build/<región>.pmtiles (reporte en build/extract-report.txt)
 	@scripts/extract.sh
@@ -59,12 +59,20 @@ node_modules/.package-lock.json: package.json package-lock.json
 style: node_modules/.package-lock.json ## Estilos MapLibre claro/oscuro ES/EN en build/style (STYLE_BASE_URL=…)
 	@node scripts/style/build.ts
 
-check: node_modules/.package-lock.json ## Tipos (tsc) y pruebas del generador de estilos
+check: node_modules/.package-lock.json ## Tipos (tsc), pruebas de Node y licencias de vendor/ al día
 	@npx tsc -p .
 	@npm test --silent
+	@node scripts/vendor-licenses.ts --check
 
-serve: ## Sirve la demo en local (issue #7)
-	@echo "make serve: pendiente, llega con el issue #7" >&2; exit 1
+licenses: node_modules/.package-lock.json ## Regenera licenses/vendor-deps.txt (tras actualizar MapLibre o PMTiles)
+	@node scripts/vendor-licenses.ts
+
+site: node_modules/.package-lock.json ## Arma build/site para publicar: demo, PMTiles, recursos y estilos
+	@scripts/site.sh
+
+# Necesita el puerto publicado: docker compose run --rm --service-ports tools make serve
+serve: node_modules/.package-lock.json ## Sirve build/site en http://localhost:8080 (con rangos HTTP, como Pages)
+	@SITE_DIR=$(BUILD_DIR)/site node scripts/serve.ts
 
 clean: ## Borra build/, incluido el caché de descargas de make assets
 	rm -rf $(BUILD_DIR)

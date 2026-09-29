@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vení · Mapa de Roldanillo</title>
+    <meta name="description" content="Mapa de Roldanillo con la marca Vení: OpenStreetMap en PMTiles y MapLibre." />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="vendor/maplibre-gl.css" />
+    <link rel="stylesheet" href="demo.css" />
+    <!-- pmtiles.js (UMD) define window.pmtiles; MapLibre se importa como módulo en demo.js. -->
+    <script src="vendor/pmtiles.js"></script>
+    <script type="module" src="demo.js"></script>
+  </head>
+  <body>
+    <header class="barra">
+      <h1 class="marca">Vení <span data-i18n="subtitulo">Mapa de Roldanillo</span></h1>
+      <div class="controles" role="toolbar" aria-label="Opciones del mapa" data-i18n-aria="opciones">
+        <div class="grupo" role="group" aria-labelledby="tema-titulo">
+          <span id="tema-titulo" class="etiqueta" data-i18n="tema">Tema</span>
+          <button type="button" data-tema="claro" data-i18n="claro">Claro</button>
+          <button type="button" data-tema="oscuro" data-i18n="oscuro">Oscuro</button>
+        </div>
+        <div class="grupo" role="group" aria-labelledby="idioma-titulo">
+          <span id="idioma-titulo" class="etiqueta" data-i18n="idioma">Idioma</span>
+          <button type="button" data-idioma="es" lang="es">ES</button>
+          <button type="button" data-idioma="en" lang="en">EN</button>
+        </div>
+      </div>
+    </header>
+    <!-- MapLibre le pone al lienzo su propio nombre accesible (y demo.js lo traduce). -->
+    <main class="principal"><div id="mapa"></div></main>
+    <noscript><p class="aviso">Este mapa necesita JavaScript. · This map needs JavaScript.</p></noscript>
+  </body>
+</html>

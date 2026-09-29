@@ -1,0 +1,107 @@
+name: Demo en GitHub Pages
+
+# La demo se construye y se despliega desde un artefacto de Actions: el PMTiles
+# y los recursos nunca entran en git. En los PR solo se construye, para probar
+# el workflow antes de fusionar; el despliegue ocurre en main.
+#
+# La demo usa la build más reciente de Protomaps en cada despliegue; la versión
+# fijada de cada release la publica release.yml.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un despliegue a la vez; uno nuevo no cancela el que está publicando.
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Construir el sitio
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # configure-pages lee la configuración de Pages del repositorio.
+      pages: read
+    outputs:
+      region: ${{ steps.region.outputs.name }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Usuario del runner para el contenedor
+        run: |
+          echo "HOST_UID=$(id -u)" >>"$GITHUB_ENV"
+          echo "HOST_GID=$(id -g)" >>"$GITHUB_ENV"
+          mkdir -p node_modules
+      - name: Región
+        id: region
+        run: echo "name=$(yq -r .name config/region.yml)" >>"$GITHUB_OUTPUT"
+      - uses: actions/configure-pages@v6
+        id: pages
+      - uses: docker/setup-buildx-action@v4
+      - name: Imagen de herramientas
+        uses: docker/build-push-action@v7
+        with:
+          context: docker/tools
+          tags: veni-mapa-tools
+          load: true
+          cache-from: type=gha,scope=tools
+          cache-to: type=gha,scope=tools,mode=max
+      - name: Caché de recursos de terceros
+        uses: actions/cache@v6
+        with:
+          path: build/cache/assets
+          key: assets-${{ hashFiles('config/assets.lock') }}
+      # Los estilos apuntan a la URL de Pages (https://<usuario>.github.io/<repo>).
+      - name: make all
+        env:
+          STYLE_BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          test -n "$STYLE_BASE_URL"
+          docker compose run --rm tools make all \
+            STYLE_BASE_URL="$STYLE_BASE_URL" STYLE_VERSION="pages-${GITHUB_SHA::7}"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/site
+
+  deploy:
+    name: Publicar
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v5
+        id: deployment
+      # PMTiles necesita que el servidor responda por rangos (206 con
+      # Content-Range) y, para la app en otro dominio, CORS abierto.
+      - name: Pages sirve rangos HTTP y CORS
+        shell: bash
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          REGION: ${{ needs.build.outputs.region }}
+        run: |
+          set -euo pipefail
+          [[ "$REGION" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "::error::región inválida: '$REGION'"; exit 1; }
+          url="${PAGE_URL%/}/$REGION.pmtiles"
+          # El CDN de Pages puede tardar en propagar el despliegue.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            status="$(curl -s -o /dev/null -D headers.txt -r 0-15 -H 'Origin: https://veniroldanillo.co' -w '%{http_code}' "$url" || true)"
+            [[ "$status" == 206 ]] && break
+            echo "Intento $attempt: $status"
+            sleep 10
+          done
+          echo "$url -> $status"
+          grep -iE '^(HTTP|content-range|content-type|access-control-allow-origin)' headers.txt || true
+          test "$status" = 206
+          grep -qiE '^content-range: bytes 0-15/[0-9]+' headers.txt || { echo "::error::falta Content-Range: bytes 0-15/…"; exit 1; }
+          grep -qiE '^access-control-allow-origin: \*' headers.txt || { echo "::error::falta Access-Control-Allow-Origin: *"; exit 1; }

@@ -44,6 +44,8 @@ export interface StyleOptions {
   /** Nombre del extracto: <baseUrl>/<region>.pmtiles */
   region: string;
   center: [number, number];
+  /** Caja de la región [oeste, sur, este, norte]: los visores limitan la cámara a ella. */
+  bounds: [number, number, number, number];
   zoom: number;
   /** Versión del estilo (la fija la release; "dev" en local). */
   version: string;
@@ -132,6 +134,18 @@ export function parseCenter(raw: string): [number, number] {
   return [lon, lat];
 }
 
+export function parseBbox(raw: string): [number, number, number, number] {
+  const parts = raw.split(",");
+  if (parts.length !== 4 || !parts.every((part) => NUMBER.test(part))) {
+    throw new Error(`REGION_BBOX debe ser "oeste,sur,este,norte" en grados decimales (recibido: '${raw}')`);
+  }
+  const [west, south, east, north] = parts.map(Number) as [number, number, number, number];
+  if (west < -180 || east > 180 || south < -90 || north > 90 || west >= east || south >= north) {
+    throw new Error(`REGION_BBOX fuera de rango o invertida (recibido: '${raw}')`);
+  }
+  return [west, south, east, north];
+}
+
 export function parseZoom(raw: string): number {
   const zoom = Number(raw);
   if (!NUMBER.test(raw) || zoom < 0 || zoom > 22) {
@@ -156,6 +170,10 @@ export function buildStyle(options: StyleOptions): StyleSpecification {
       "veni:region": options.region,
       "veni:base_url": baseUrl,
       "veni:protomaps_build": options.protomapsBuild,
+      // El extracto guarda tiles enteros: en zooms bajos un tile cubre medio
+      // continente (en z0, el planeta). Los visores usan esta caja como
+      // maxBounds para no salir de la región.
+      "veni:bounds": options.bounds,
     },
     center: options.center,
     zoom: options.zoom,
