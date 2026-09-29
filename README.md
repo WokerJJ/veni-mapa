@@ -1,8 +1,43 @@
 # Vení · Mapa de Roldanillo
 
+[![CI](https://github.com/WokerJJ/veni-mapa/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WokerJJ/veni-mapa/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/WokerJJ/veni-mapa?label=release)](https://github.com/WokerJJ/veni-mapa/releases/latest)
+[![Demo](https://github.com/WokerJJ/veni-mapa/actions/workflows/pages.yml/badge.svg?branch=main)](https://wokerjj.github.io/veni-mapa/)
+[![Datos: ODbL](https://img.shields.io/badge/datos-ODbL%201.0-blue)](https://opendatacommons.org/licenses/odbl/1-0/)
+
 Pipeline reproducible que recorta Roldanillo (Valle del Cauca, Colombia) de OpenStreetMap, lo empaqueta como [PMTiles](https://docs.protomaps.com/pmtiles/) y genera un estilo [MapLibre](https://maplibre.org/) con la marca **Vení**. Cada versión se publica como release para que la app [veni-roldanillo](https://github.com/WokerJJ/veni-roldanillo) la consuma sin depender de la API de Google Maps.
 
-> 🚧 En construcción: milestone **v0.1.0 · Primer mapa**. El avance está en [docs/BITACORA.md](docs/BITACORA.md).
+| Claro | Oscuro |
+| --- | --- |
+| ![Demo con el estilo claro en español](docs/img/demo-claro-es.png) | ![Demo con el estilo oscuro en español](docs/img/demo-oscuro-es.png) |
+
+Las capturas las genera la prueba de render (ver [Pruebas](#pruebas)). El avance y las decisiones están en [docs/BITACORA.md](docs/BITACORA.md).
+
+## Cómo funciona
+
+```mermaid
+flowchart LR
+  osm[OpenStreetMap] --> pm[Build diaria de Protomaps<br/>planeta en PMTiles]
+  pm -->|make extract<br/>solo rangos HTTP de la región| ext[roldanillo.pmtiles]
+  lock[config/assets.lock<br/>fuentes y sprites fijados] -->|make assets<br/>font-maker| assets[glyphs y sprites]
+  marca[Paleta Vení<br/>scripts/style] -->|make style| estilos[4 estilos MapLibre<br/>claro/oscuro · es/en]
+  ext --> verify{make verify}
+  assets --> verify
+  estilos --> verify
+  verify -->|release.yml| rel[Release vX.Y.Z<br/>con manifest.json]
+  verify -->|pages.yml| demo[Demo en GitHub Pages]
+  rel --> app[App veni-roldanillo]
+```
+
+1. **Datos:** Protomaps publica cada día el planeta de OpenStreetMap como un solo PMTiles. `make extract` recorta la caja de Roldanillo pidiendo por rangos HTTP solo esa zona, sin descargar el planeta.
+2. **Recursos:** las fuentes de la marca y los sprites se descargan fijados por commit y SHA-256, y font-maker los convierte en glyphs que MapLibre puede servir sin CDN.
+3. **Estilos:** `@protomaps/basemaps` genera las capas y la paleta de Vení las colorea; salen cuatro variantes con URLs absolutas a donde se publiquen los datos.
+4. **Verificación y publicación:** todo pasa por `make verify` (validador de MapLibre y chequeos del extracto). Cada release adjunta las piezas con sus sumas SHA-256, y la app las consume.
+
+## Requisitos
+
+- **Docker** (Docker Desktop en Windows o macOS). Es lo único necesario para generar el mapa.
+- **Node 24** en el host, solo para la prueba de render con Playwright, que no corre en Alpine.
 
 ## Uso
 
@@ -47,6 +82,38 @@ La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los t
 MapLibre GL y PMTiles autohospedados (sin CDN), botones para tema claro u oscuro y etiquetas en español o inglés, con la interfaz traducida. Lo que elegís queda en la URL (`?tema=oscuro&idioma=en`) y la vista en el fragmento (`#vista=zoom/lat/lon`); sin tema elegido, la demo sigue la preferencia del sistema, también si cambia. Los controles de MapLibre también se traducen.
 
 La cámara no sale de la región: el extracto guarda tiles enteros y en zooms bajos un tile cubre medio continente (en el zoom 0, el planeta), así que el estilo publica la caja de `config/region.yml` en `metadata["veni:bounds"]` y la demo la usa como `maxBounds`. La app hace lo mismo. Detalles de publicación y rangos HTTP en [docs/PUBLICACION.md](docs/PUBLICACION.md).
+
+## Usar el mapa en la app
+
+La app [veni-roldanillo](https://github.com/WokerJJ/veni-roldanillo) no copia este repositorio: carga un estilo publicado desde la variable de entorno `VITE_MAP_STYLE_URL`.
+
+| Entorno | `VITE_MAP_STYLE_URL` |
+| --- | --- |
+| Local, con `make serve` | `http://localhost:8080/style/veni-claro-es.json` |
+| Demo (sigue `main`, no es versionada) | `https://wokerjj.github.io/veni-mapa/style/veni-claro-es.json` |
+| Producción, cuando R2 esté activo | `https://tiles.veniroldanillo.co/vX.Y.Z/veni-claro-es.json` (versión fija) |
+
+El tema y el idioma los controla la app, no el mapa: cambia `claro`/`oscuro` y `es`/`en` en el nombre del archivo y llama a `map.setStyle(url, { diff: false })`. El mapa no trae botones propios.
+
+```ts
+import maplibregl from "maplibre-gl";
+import { Protocol } from "pmtiles";
+
+// Los estilos piden los tiles como pmtiles://…: MapLibre los lee por rangos HTTP.
+const protocol = new Protocol();
+maplibregl.addProtocol("pmtiles", protocol.tile);
+
+const style = await (await fetch(import.meta.env.VITE_MAP_STYLE_URL)).json();
+const map = new maplibregl.Map({
+  container: "mapa",
+  style, // trae center y zoom de Roldanillo
+  maxBounds: style.metadata["veni:bounds"], // la cámara no sale de la región
+});
+```
+
+- **Atribución:** la fuente del estilo ya trae "© colaboradores de OpenStreetMap"; no ocultes el control de atribución de MapLibre (en móvil, `compact: true`).
+- **Versiones:** en producción conviene fijar una versión (`/vX.Y.Z/`) y actualizarla a propósito. `manifest.json` de cada release dice qué build de OpenStreetMap trae y el SHA-256 de cada archivo. Ver [Releases](#releases).
+- **Capas propias** (restaurantes, ubicación, rutas) las agrega la app encima con `map.addSource` y `map.addLayer`; este repositorio solo publica el mapa base.
 
 ## Estilos
 
@@ -210,16 +277,26 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 
 El render sirve `build/site` en la base con la que se generaron los estilos (por defecto `http://localhost:8080`; si ya corre `make serve`, lo reutiliza). Para usar otro puerto, generá el sitio con esa base: `docker compose run --rm tools make style site STYLE_BASE_URL=http://localhost:8095` y después `npm run test:render`.
 
+Las capturas del README (`docs/img/demo-{claro,oscuro}-es.png`) salen de esta misma prueba: con `RENDER_CAPTURE_DIR` guarda cada captura en esa carpeta. Después de `make all`:
+
+```bash
+RENDER_CAPTURE_DIR=docs/img npx playwright test -g "· es: se dibuja"
+```
+
+En PowerShell: `$env:RENDER_CAPTURE_DIR="docs/img"; npx.cmd playwright test -g "· es: se dibuja"`.
+
 La CI corre todo lo anterior en cada PR; las suites no pueden quedar omitidas, una prueba de render que solo pasa al reintentar cuenta como fallo, y el render sube sus capturas como artefacto. Pages corre `make verify` antes de publicar.
 
 ## Documentación
 
 - [docs/BITACORA.md](docs/BITACORA.md): diario de avance.
 - [docs/PUBLICACION.md](docs/PUBLICACION.md): dónde se publica el mapa (Pages, R2), requisitos de rangos HTTP y cómo activar R2.
+- [docs/CONTRIBUIR-OSM.md](docs/CONTRIBUIR-OSM.md): cómo mejorar los datos de Roldanillo en OpenStreetMap.
 - [CONTRIBUTING.md](CONTRIBUTING.md): flujo de trabajo, ramas y commits.
+- [SECURITY.md](SECURITY.md): cómo reportar una vulnerabilidad.
 
 ## Licencia y atribución
 
 - Código: todos los derechos reservados, ver [LICENSE](LICENSE).
-- Datos del mapa: © colaboradores de OpenStreetMap, bajo [ODbL](https://opendatacommons.org/licenses/odbl/1-0/).
+- Datos del mapa: © colaboradores de OpenStreetMap, bajo [ODbL](https://opendatacommons.org/licenses/odbl/1-0/). ¿Falta algo o está mal? Se corrige en OpenStreetMap: ver [docs/CONTRIBUIR-OSM.md](docs/CONTRIBUIR-OSM.md).
 - Componentes de terceros: ver [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
