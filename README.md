@@ -6,7 +6,6 @@ Pipeline reproducible que recorta Roldanillo (Valle del Cauca, Colombia) de Open
 
 ## Documentación
 
-- [docs/AGENTES.md](docs/AGENTES.md): cómo se reparte el trabajo entre agentes.
 - [docs/BITACORA.md](docs/BITACORA.md): diario de avance.
 - [CONTRIBUTING.md](CONTRIBUTING.md): flujo de trabajo, ramas y commits.
 

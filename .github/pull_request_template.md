@@ -18,4 +18,4 @@ Closes #
 - [ ] Atribución "© colaboradores de OpenStreetMap" visible donde se muestra el mapa.
 - [ ] Licencias de terceros actualizadas en `THIRD_PARTY_NOTICES.md` si se agregó un recurso.
 - [ ] Documentación actualizada (README, `docs/`).
-- [ ] Revisión de `evaluador-codigo` (y `buscador-fallas` si toca secrets o publicación) con hallazgos resueltos.
+- [ ] Revisión de código (y de seguridad si toca secrets, publicación o CORS) con observaciones resueltas.

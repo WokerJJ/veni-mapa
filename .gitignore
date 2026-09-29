@@ -21,6 +21,3 @@ npm-debug.log*
 Thumbs.db
 /.idea
 /.vscode
-
-# Memoria local de agentes (no se versiona)
-/.claude/agentes/
