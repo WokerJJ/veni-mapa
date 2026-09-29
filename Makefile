@@ -14,11 +14,15 @@ BUILD_DATE ?=
 
 # Los valores de la región salen de config/region.yml. make regenera
 # build/region.mk cuando cambia el YAML y lo vuelve a leer antes de seguir.
+# help y clean no lo necesitan: así funcionan aunque el YAML esté roto.
+NO_REGION_GOALS := help clean
+ifneq ($(filter-out $(NO_REGION_GOALS),$(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))),)
 include $(BUILD_DIR)/region.mk
+endif
 
 $(BUILD_DIR)/region.mk: config/region.yml scripts/region.sh
 	@mkdir -p $(@D)
-	@scripts/region.sh $< >$@.tmp
+	@scripts/region.sh $< >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv $@.tmp $@
 
 export REGION_NAME REGION_BBOX REGION_MAXZOOM BUILD_DIR BUILD_DATE
@@ -30,7 +34,7 @@ help: ## Muestra esta ayuda
 	@echo
 	@grep -hE '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 	@echo
-	@echo "Variables: BUILD_DATE=AAAAMMDD fija la build de Protomaps (por defecto, la más reciente)."
+	@echo "Variables: make extract BUILD_DATE=AAAAMMDD fija la build de Protomaps (por defecto, la más reciente)."
 
 all: extract assets style ## Genera todo: extracto, recursos y estilos
 

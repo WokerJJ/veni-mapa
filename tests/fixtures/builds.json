@@ -2,5 +2,6 @@
   {"key": "20260926.pmtiles", "size": 138339871890, "version": "4.15.2"},
   {"key": "20260928.pmtiles", "size": 138415942566, "version": "4.15.2"},
   {"key": "20260927.pmtiles", "size": 138356870873, "version": "4.15.2"},
-  {"key": "20260101-test.pmtiles", "size": 1, "version": "0.0.0"}
+  {"key": "20261231-test.pmtiles", "size": 1, "version": "0.0.0"},
+  {"key": "planet-latest.pmtiles", "size": 1, "version": "0.0.0"}
 ]

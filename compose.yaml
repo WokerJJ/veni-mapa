@@ -4,6 +4,9 @@ services:
     build: docker/tools
     image: veni-mapa-tools
     working_dir: /work
+    # Corre con el usuario del host para que build/ no quede de root en Linux.
+    # En Docker Desktop (Windows, macOS) el valor por defecto sirve igual.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - .:/work
     environment:

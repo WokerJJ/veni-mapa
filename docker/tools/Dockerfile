@@ -4,7 +4,7 @@
 # go-pmtiles publica un binario estático; se copia a una imagen con shell.
 FROM protomaps/go-pmtiles:v1.31.2 AS pmtiles
 
-FROM node:24-alpine3.22
+FROM alpine:3.22
 
 RUN apk add --no-cache bash coreutils curl jq make yq-go
 

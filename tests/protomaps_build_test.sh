@@ -31,14 +31,25 @@ expect_error() {
   fi
 }
 
-expect_output "sin fecha elige la build más reciente, aunque el índice no venga ordenado" 20260928
+# El fixture trae claves que no son builds diarias y que, al ordenar, quedan
+# después de la real (20261231-test, planet-latest): sin el filtro, la "más
+# reciente" sería una de ellas.
+expect_output "sin fecha elige la build diaria más reciente e ignora otras claves" 20260928
 expect_output "con fecha existente la devuelve" 20260926 20260926
 expect_error "fecha que no existe" "no existe la build 20250101" 20250101
+expect_error "una clave no diaria no se acepta como build" "no existe la build 20261231" 20261231
 expect_error "fecha con formato inválido" "formato AAAAMMDD" 2026-09-28
-expect_error "claves que no son builds diarias se ignoran" "no existe la build 20260101" 20260101
+expect_error "fecha con espacios" "formato AAAAMMDD" " 20260928"
 
 PROTOMAPS_BUILDS_URL="file://$PWD/tests/fixtures/no-existe.json" \
   expect_error "índice inaccesible" "no se pudo leer la lista de builds"
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+echo '[]' >"$tmp/vacio.json"
+echo 'esto no es JSON' >"$tmp/roto.json"
+PROTOMAPS_BUILDS_URL="file://$tmp/vacio.json" expect_error "índice vacío" "está vacía"
+PROTOMAPS_BUILDS_URL="file://$tmp/roto.json" expect_error "índice que no es JSON" "no es JSON válido"
 
 if ((failures > 0)); then
   echo "$failures prueba(s) fallaron"
