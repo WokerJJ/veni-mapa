@@ -3,7 +3,8 @@
 //
 // Lo esperado (vista inicial, caja, fondo) se lee de los estilos servidos, que
 // salen de config/region.yml y de la paleta: aquí no se repiten valores.
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 interface Style {
@@ -60,11 +61,19 @@ async function waitForMap(page: Page): Promise<void> {
   );
 }
 
+// Con RENDER_CAPTURE_DIR, las capturas también se guardan ahí (las del README
+// salen de docs/img: ver "Pruebas" en el README).
+const captureDir = process.env.RENDER_CAPTURE_DIR;
+
 /** El lienzo tiene contenido: un mapa vacío (solo fondo) comprime a < 10 KB; uno real, a > 200 KB. */
 async function expectDrawn(page: Page, testInfo: TestInfo, name: string): Promise<void> {
   const shot = await page.locator("#mapa").screenshot();
   await testInfo.attach(`${name}.png`, { body: shot, contentType: "image/png" });
   expect(shot.byteLength, `captura de ${name} con contenido`).toBeGreaterThan(40_000);
+  if (captureDir) {
+    mkdirSync(captureDir, { recursive: true });
+    writeFileSync(join(captureDir, `${name}.png`), shot);
+  }
 }
 
 /** Errores de la página, de consola y respuestas ≥ 400 (los avisos de WebGL no cuentan). */
