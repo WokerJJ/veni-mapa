@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: Workflows (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
+  # Único check obligatorio en la protección de main: agrega el resultado de
+  # todos los jobs, así sumar jobs nuevos no obliga a tocar la protección.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [actionlint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Todos los jobs pasaron
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "Algún job falló o se canceló"; exit 1
+          fi
