@@ -11,7 +11,7 @@ declare global {
       getZoom(): number;
       getCenter(): { lng: number; lat: number };
       getBounds(): { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };
-      getStyle(): { name?: string; metadata?: Record<string, unknown> };
+      getStyle(): { name?: string; metadata?: Record<string, unknown> } | undefined;
       getPaintProperty(layer: string, property: string): unknown;
       queryRenderedFeatures(): unknown[];
       zoomTo(zoom: number, options: { duration: number }): void;
@@ -58,8 +58,8 @@ for (const tema of ["claro", "oscuro"] as const) {
       const state = await page.evaluate(() => ({
         features: window.veniMapa.queryRenderedFeatures().length,
         zoom: window.veniMapa.getZoom(),
-        style: window.veniMapa.getStyle().name,
-        lang: window.veniMapa.getStyle().metadata?.["veni:lang"],
+        style: window.veniMapa.getStyle()?.name,
+        lang: window.veniMapa.getStyle()?.metadata?.["veni:lang"],
         background: window.veniMapa.getPaintProperty("background", "background-color"),
       }));
       expect(state.features, "features dibujadas").toBeGreaterThan(50);
@@ -115,7 +115,8 @@ test("cambiar a oscuro redibuja el mapa sin mover la cámara", async ({ page }) 
   const before = await page.evaluate(() => ({ zoom: window.veniMapa.getZoom(), center: window.veniMapa.getCenter() }));
 
   await page.getByRole("button", { name: "Oscuro" }).click();
-  await page.waitForFunction(() => window.veniMapa.getStyle().name === "Vení · Oscuro (ES)");
+  // Mientras se recarga el estilo completo, getStyle() puede devolver undefined.
+  await page.waitForFunction(() => window.veniMapa.getStyle()?.name === "Vení · Oscuro (ES)");
   await waitForMap(page);
 
   const after = await page.evaluate(() => ({
