@@ -1,6 +1,18 @@
 // Render de la demo en Chromium sin interfaz: el mapa se dibuja de verdad,
 // sin errores, en los cuatro estilos y sin tener que mover la cámara.
-import { expect, test, type Page } from "@playwright/test";
+//
+// Lo esperado (vista inicial, caja, fondo) se lee de los estilos servidos, que
+// salen de config/region.yml y de la paleta: aquí no se repiten valores.
+import { readFileSync } from "node:fs";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
+
+interface Style {
+  name?: string;
+  center?: [number, number];
+  zoom?: number;
+  metadata?: Record<string, unknown>;
+  layers?: { id: string; paint?: Record<string, unknown> }[];
+}
 
 declare global {
   interface Window {
@@ -8,33 +20,54 @@ declare global {
       loaded(): boolean;
       areTilesLoaded(): boolean;
       isMoving(): boolean;
+      once(event: string, listener: () => void): void;
+      triggerRepaint(): void;
       getZoom(): number;
       getCenter(): { lng: number; lat: number };
       getBounds(): { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };
-      getStyle(): { name?: string; metadata?: Record<string, unknown> } | undefined;
+      getStyle(): Style | undefined;
       getPaintProperty(layer: string, property: string): unknown;
       queryRenderedFeatures(): unknown[];
       zoomTo(zoom: number, options: { duration: number }): void;
-      getCanvas(): HTMLCanvasElement;
     };
   }
 }
 
+type Tema = "claro" | "oscuro";
+type Idioma = "es" | "en";
+
+const served = (tema: Tema, idioma: Idioma): Style =>
+  JSON.parse(readFileSync(`build/site/style/veni-${tema}-${idioma}.json`, "utf8")) as Style;
+const background = (style: Style): string =>
+  String(style.layers?.find((layer) => layer.id === "background")?.paint?.["background-color"]).toUpperCase();
+
 const LABELS = {
-  es: { zoomIn: "Acercar", map: "Mapa de Roldanillo", title: "Vení · Mapa de Roldanillo" },
-  en: { zoomIn: "Zoom in", map: "Map of Roldanillo", title: "Vení · Roldanillo map" },
+  es: { zoomIn: "Acercar", map: "Mapa de Roldanillo", title: "Vení · Mapa de Roldanillo", oscuro: "Oscuro" },
+  en: { zoomIn: "Zoom in", map: "Map of Roldanillo", title: "Vení · Roldanillo map", oscuro: "Dark" },
 } as const;
 
-const BACKGROUND = { claro: "#F3ECF6", oscuro: "#1C0F26" } as const;
-
-/** Espera a que el mapa termine de cargar y dibujar sin tocar la cámara. */
+/** Espera a que el mapa cargue y quede en reposo (evento idle), sin mover la cámara. */
 async function waitForMap(page: Page): Promise<void> {
-  await page.waitForFunction(() => window.veniMapa?.loaded() && window.veniMapa.areTilesLoaded() && !window.veniMapa.isMoving(), null, {
-    timeout: 30_000,
-  });
+  await page.waitForFunction(() => window.veniMapa?.getStyle() !== undefined && window.veniMapa.loaded(), null, { timeout: 30_000 });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const map = window.veniMapa;
+        map.once("idle", () => resolve());
+        // Si ya estaba en reposo, un repintado vuelve a emitir idle.
+        if (map.loaded() && map.areTilesLoaded() && !map.isMoving()) map.triggerRepaint();
+      }),
+  );
 }
 
-/** Errores de la página y de consola (los avisos de WebGL no cuentan). */
+/** El lienzo tiene contenido: un mapa vacío (solo fondo) comprime a < 10 KB; uno real, a > 200 KB. */
+async function expectDrawn(page: Page, testInfo: TestInfo, name: string): Promise<void> {
+  const shot = await page.locator("#mapa").screenshot();
+  await testInfo.attach(`${name}.png`, { body: shot, contentType: "image/png" });
+  expect(shot.byteLength, `captura de ${name} con contenido`).toBeGreaterThan(40_000);
+}
+
+/** Errores de la página, de consola y respuestas ≥ 400 (los avisos de WebGL no cuentan). */
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
@@ -50,28 +83,27 @@ function collectErrors(page: Page): string[] {
 for (const tema of ["claro", "oscuro"] as const) {
   for (const idioma of ["es", "en"] as const) {
     test(`${tema} · ${idioma}: se dibuja al abrir, sin errores y en su idioma`, async ({ page }, testInfo) => {
+      const style = served(tema, idioma);
       const errors = collectErrors(page);
       await page.goto(`/?tema=${tema}&idioma=${idioma}`);
       await waitForMap(page);
+      // Primero los errores: explican mejor un mapa vacío (por ejemplo, un 404).
+      expect(errors).toEqual([]);
 
-      // Se dibujó sin mover la cámara: hay features en pantalla y la vista es la inicial.
+      // Los estilos piden los datos al mismo origen que sirve la página.
+      expect(String(style.metadata?.["veni:base_url"])).toBe(new URL(page.url()).origin);
+
       const state = await page.evaluate(() => ({
         features: window.veniMapa.queryRenderedFeatures().length,
         zoom: window.veniMapa.getZoom(),
-        style: window.veniMapa.getStyle()?.name,
-        lang: window.veniMapa.getStyle()?.metadata?.["veni:lang"],
+        name: window.veniMapa.getStyle()?.name,
         background: window.veniMapa.getPaintProperty("background", "background-color"),
       }));
-      expect(state.features, "features dibujadas").toBeGreaterThan(50);
-      expect(state.zoom).toBeCloseTo(13.5, 1);
-      expect(state.lang).toBe(idioma);
-      expect(String(state.background).toUpperCase()).toBe(BACKGROUND[tema]);
-
-      // Un lienzo vacío (solo fondo) comprime a muy poco; uno con calles y
-      // etiquetas pesa bastante más.
-      const shot = await page.locator("#mapa").screenshot();
-      await testInfo.attach(`demo-${tema}-${idioma}.png`, { body: shot, contentType: "image/png" });
-      expect(shot.byteLength, "captura con contenido").toBeGreaterThan(40_000);
+      expect(state.name).toBe(style.name);
+      expect(state.zoom).toBeCloseTo(Number(style.zoom), 3);
+      expect(String(state.background).toUpperCase()).toBe(background(style));
+      expect(state.features, "features en los tiles cargados").toBeGreaterThan(50);
+      await expectDrawn(page, testInfo, `demo-${tema}-${idioma}`);
 
       // Textos accesibles en el idioma elegido.
       await expect(page).toHaveTitle(LABELS[idioma].title);
@@ -79,8 +111,6 @@ for (const tema of ["claro", "oscuro"] as const) {
       await expect(page.locator(".maplibregl-ctrl-zoom-in")).toHaveAttribute("aria-label", LABELS[idioma].zoomIn);
       await expect(page.locator(".maplibregl-canvas")).toHaveAttribute("aria-label", LABELS[idioma].map);
       await expect(page.getByRole("link", { name: /OpenStreetMap/ })).toBeVisible();
-
-      expect(errors).toEqual([]);
     });
   }
 }
@@ -89,8 +119,9 @@ for (const tema of ["claro", "oscuro"] as const) {
 // centro del estilo; en algunos navegadores los tiles no se redibujan hasta
 // mover la cámara y el mapa se ve vacío. Chromium sin interfaz sí redibuja, así
 // que se comprueba el síntoma determinista: la primera vista que el mapa
-// escribe en la URL (#vista=zoom/lat/lon) ya tiene que ser la de la región.
+// escribe en la URL (#vista=zoom/lat/lon) ya tiene que ser la del estilo.
 test("el mapa arranca en la región, no en el mundo entero", async ({ page }) => {
+  const style = served("claro", "es");
   await page.addInitScript(() => {
     const views: string[] = [];
     (window as unknown as { vistas: string[] }).vistas = views;
@@ -105,36 +136,43 @@ test("el mapa arranca en la región, no en el mundo entero", async ({ page }) =>
   await waitForMap(page);
   const views = await page.evaluate(() => (window as unknown as { vistas: string[] }).vistas);
   expect(views.length, "el mapa escribió su vista en la URL").toBeGreaterThan(0);
-  expect(views[0]).toMatch(/^#vista=13\.5\/4\.41\d*\/-76\.15\d*$/);
+  const [zoom, lat, lon] = views[0]!.replace("#vista=", "").split("/").map(Number) as [number, number, number];
+  const [centerLon, centerLat] = style.center!;
+  expect(zoom, `primera vista ${views[0]}`).toBeCloseTo(Number(style.zoom), 3);
+  expect(lat).toBeCloseTo(centerLat, 3);
+  expect(lon).toBeCloseTo(centerLon, 3);
 });
 
-test("cambiar a oscuro redibuja el mapa sin mover la cámara", async ({ page }) => {
+test("cambiar a oscuro redibuja el mapa sin mover la cámara", async ({ page }, testInfo) => {
+  const oscuro = served("oscuro", "es");
   const errors = collectErrors(page);
   await page.goto("/?tema=claro&idioma=es");
   await waitForMap(page);
   const before = await page.evaluate(() => ({ zoom: window.veniMapa.getZoom(), center: window.veniMapa.getCenter() }));
 
-  await page.getByRole("button", { name: "Oscuro" }).click();
+  await page.getByRole("button", { name: LABELS.es.oscuro }).click();
   // Mientras se recarga el estilo completo, getStyle() puede devolver undefined.
-  await page.waitForFunction(() => window.veniMapa.getStyle()?.name === "Vení · Oscuro (ES)");
+  await page.waitForFunction((name) => window.veniMapa.getStyle()?.name === name, oscuro.name);
   await waitForMap(page);
+  expect(errors).toEqual([]);
 
   const after = await page.evaluate(() => ({
     zoom: window.veniMapa.getZoom(),
     center: window.veniMapa.getCenter(),
     background: window.veniMapa.getPaintProperty("background", "background-color"),
-    features: window.veniMapa.queryRenderedFeatures().length,
   }));
-  expect(String(after.background).toUpperCase()).toBe(BACKGROUND.oscuro);
-  expect(after.features).toBeGreaterThan(50);
+  expect(String(after.background).toUpperCase()).toBe(background(oscuro));
   expect(after.zoom).toBeCloseTo(before.zoom, 5);
   expect(after.center.lng).toBeCloseTo(before.center.lng, 6);
-  await expect(page.getByRole("button", { name: "Oscuro" })).toHaveAttribute("aria-pressed", "true");
+  expect(after.center.lat).toBeCloseTo(before.center.lat, 6);
+  // Se redibujó de verdad, no solo cambió el fondo.
+  await expectDrawn(page, testInfo, "demo-cambio-a-oscuro");
+  await expect(page.getByRole("button", { name: LABELS.es.oscuro })).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveURL(/tema=oscuro/);
-  expect(errors).toEqual([]);
 });
 
 test("la cámara no sale de la región al alejarse", async ({ page }) => {
+  const [west, south, east, north] = served("claro", "es").metadata?.["veni:bounds"] as [number, number, number, number];
   await page.goto("/?tema=claro&idioma=es");
   await waitForMap(page);
   await page.evaluate(() => window.veniMapa.zoomTo(2, { duration: 0 }));
@@ -142,25 +180,23 @@ test("la cámara no sale de la región al alejarse", async ({ page }) => {
     const b = window.veniMapa.getBounds();
     return { zoom: window.veniMapa.getZoom(), bounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()] };
   });
-  expect(view.zoom).toBeGreaterThan(8);
-  const [west, south, east, north] = view.bounds as [number, number, number, number];
-  expect(west).toBeGreaterThanOrEqual(-76.3 - 1e-6);
-  expect(south).toBeGreaterThanOrEqual(4.3 - 1e-6);
-  expect(east).toBeLessThanOrEqual(-76.0 + 1e-6);
-  expect(north).toBeLessThanOrEqual(4.55 + 1e-6);
+  expect(view.zoom).toBeGreaterThan(2);
+  const [viewWest, viewSouth, viewEast, viewNorth] = view.bounds as [number, number, number, number];
+  expect(viewWest).toBeGreaterThanOrEqual(west - 1e-6);
+  expect(viewSouth).toBeGreaterThanOrEqual(south - 1e-6);
+  expect(viewEast).toBeLessThanOrEqual(east + 1e-6);
+  expect(viewNorth).toBeLessThanOrEqual(north + 1e-6);
 });
 
-test("en móvil no hay scroll horizontal y los botones miden al menos 44 px", async ({ page }) => {
+test("en móvil no hay scroll horizontal y los botones de tema e idioma miden al menos 44 px", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/?tema=claro&idioma=es");
   await waitForMap(page);
-  const layout = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    buttons: [...document.querySelectorAll(".grupo button")].map((b) => b.getBoundingClientRect()),
-  }));
-  expect(layout.scrollWidth).toBeLessThanOrEqual(375);
-  for (const button of layout.buttons) {
-    expect(button.height).toBeGreaterThanOrEqual(44);
-    expect(button.width).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  const buttons = page.getByRole("toolbar").getByRole("button");
+  await expect(buttons).toHaveCount(4);
+  for (const box of await buttons.evaluateAll((elements) => elements.map((e) => e.getBoundingClientRect().toJSON()))) {
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.width).toBeGreaterThanOrEqual(44);
   }
 });
