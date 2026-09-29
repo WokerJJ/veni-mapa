@@ -12,7 +12,8 @@
 # raíz, y assets.tar.gz desempaquetado (fonts/, sprites/, licenses/).
 #
 # Caché: /vX.Y.Z/ no cambia nunca (inmutable, un año); /latest/ se mueve con
-# cada release (cinco minutos).
+# cada release (cinco minutos), nunca hacia atrás, y queda igual al árbol de su
+# versión: lo que la release ya no trae se borra.
 set -euo pipefail
 
 dist="${1:?uso: scripts/r2-publish.sh <dist>}"
@@ -46,7 +47,8 @@ version="$(jq -r '.version' "$manifest")"
 [[ "$R2_BUCKET" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]] || fail "R2_BUCKET no es un nombre de bucket válido"
 
 tree="$(mktemp -d)"
-trap 'rm -rf "$tree"' EXIT
+err="$(mktemp)"
+trap 'rm -rf "$tree" "$err"' EXIT
 find "$dist" -maxdepth 1 -type f ! -name assets.tar.gz -exec cp {} "$tree/" \;
 tar -xzf "$dist/assets.tar.gz" -C "$tree" --no-same-owner
 cp "$dist/assets.tar.gz" "$tree/"
@@ -71,12 +73,6 @@ types=(
 
 upload() {
   local prefix="$1" cache="$2" entry pattern type
-  # Todos los archivos del árbol tienen que tener tipo: si aparece uno nuevo,
-  # falla antes de subir nada.
-  local unknown
-  unknown="$(cd "$tree" && find . -type f ! -name '*.pmtiles' ! -name '*.pbf' ! -name '*.json' ! -name '*.png' \
-    ! -name '*.tar.gz' ! -name '*.txt' ! -name '*.md' ! -name SHA256SUMS)"
-  [[ -z "$unknown" ]] || fail "archivos sin tipo de contenido: $unknown"
   for entry in "${types[@]}"; do
     pattern="${entry%%=*}"
     type="${entry#*=}"
@@ -85,9 +81,50 @@ upload() {
   done
 }
 
+# Todo archivo del árbol tiene que casar con un patrón de types, con la misma
+# regla que la CLI (ruta relativa; "*" también cruza "/"): si no, no se subiría.
+unknown=()
+while IFS= read -r -d '' file; do
+  rel="${file#"$tree"/}"
+  matched=0
+  for entry in "${types[@]}"; do
+    # shellcheck disable=SC2053 # el patrón es un glob a propósito
+    [[ "$rel" == ${entry%%=*} ]] && { matched=1; break; }
+  done
+  ((matched)) || unknown+=("$rel")
+done < <(find "$tree" -type f -print0)
+((${#unknown[@]} == 0)) || fail "archivos sin tipo de contenido: ${unknown[*]}"
+
 echo "==> R2: s3://$R2_BUCKET/v$version/"
 upload "v$version" "public, max-age=31536000, immutable"
+
+# latest/ nunca retrocede: un re-adjunto de una versión vieja no la mueve.
+# Sin latest/manifest.json (primera publicación), se crea.
+current=""
+if published="$(aws s3 cp "s3://$R2_BUCKET/latest/manifest.json" - --endpoint-url "$endpoint" --only-show-errors 2>"$err")"; then
+  current="$(jq -r '.version // empty' <<<"$published" 2>/dev/null || true)"
+  [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "latest/manifest.json publicado no tiene una versión válida"
+elif ! grep -qE '\(404\)|NoSuchKey|does not exist' "$err"; then
+  fail "no se pudo leer latest/manifest.json: $(head -c 300 "$err")"
+fi
+if [[ -n "$current" && "$current" != "$version" && "$(printf '%s\n' "$current" "$version" | sort -V | tail -n1)" == "$current" ]]; then
+  echo "::notice title=latest sin cambios::latest/ ya tiene la v$current, más nueva que la v$version: solo se publicó /v$version/."
+  exit 0
+fi
+
 # latest/ al final: nunca apunta a una versión a medio subir.
-echo "==> R2: s3://$R2_BUCKET/latest/"
+echo "==> R2: s3://$R2_BUCKET/latest/ (antes: ${current:-vacío})"
 upload latest "public, max-age=300"
-echo "==> Listo: v$version y latest en R2 ($(find "$tree" -type f | wc -l) archivos por prefijo)"
+
+# Borra de latest/ lo que esta versión ya no trae (no sync --delete: compara
+# por tamaño y fecha, y el tar trae todas las fechas en 0).
+# Un fallo al listar corta aquí (set -e): no se borra nada a ciegas.
+keys="$(aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix latest/ --endpoint-url "$endpoint" \
+  --query 'Contents[].Key' --output json | jq -r '.[]?')"
+stale=0
+while IFS= read -r key; do
+  [[ -z "$key" || -f "$tree/${key#latest/}" ]] && continue
+  aws s3 rm "s3://$R2_BUCKET/$key" --endpoint-url "$endpoint" --only-show-errors
+  stale=$((stale + 1))
+done <<<"$keys"
+echo "==> Listo: v$version y latest en R2 ($(find "$tree" -type f | wc -l) archivos por prefijo, $stale obsoletos borrados de latest/)"

@@ -162,12 +162,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Una sola publicación en R2 a la vez, de cualquier tag: dos corridas
+    # juntas mezclarían los archivos de latest/.
+    concurrency:
+      group: r2
+      cancel-in-progress: false
     env:
       TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
     steps:
+      # El script es el de este workflow, no el del tag: de la release solo se
+      # toman los datos (dist/), así las correcciones valen también al re-adjuntar.
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v8
         with:
           name: release-${{ env.TAG }}
