@@ -29,7 +29,8 @@ FROM node:24-alpine3.22
 ARG FONT_MAKER_COMMIT
 ENV FONT_MAKER_COMMIT=$FONT_MAKER_COMMIT
 
-RUN apk add --no-cache bash coreutils curl freetype jq libstdc++ make yq-go
+# tar y gzip de GNU: make release arma un assets.tar.gz reproducible (--sort, --mtime).
+RUN apk add --no-cache bash coreutils curl freetype gzip jq libstdc++ make tar yq-go
 
 COPY --from=pmtiles /go-pmtiles /usr/local/bin/pmtiles
 COPY --from=font-maker /src/build/font-maker /usr/local/bin/font-maker

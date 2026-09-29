@@ -1,0 +1,154 @@
+name: Release
+
+# release-please mantiene abierto un PR de release con la próxima versión y el
+# CHANGELOG, calculados desde los commits convencionales de main. Al fusionar
+# ese PR crea el tag vX.Y.Z y la release, y el job "artefactos" construye el
+# mapa de esa versión y lo adjunta.
+#
+# A mano (workflow_dispatch con un tag existente) vuelve a construir y adjuntar
+# los artefactos de esa release, por ejemplo si la subida falló.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release existente a la que volver a adjuntar los artefactos (vX.Y.Z)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Una ejecución a la vez y sin cancelar: una release a medio publicar no se
+# interrumpe. GitHub deja un solo run pendiente por grupo, así que cada
+# re-adjunto manual tiene el suyo y un push a main no lo desplaza.
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release-please
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      # Etiquetas del PR de release (autorelease: pending/tagged).
+      issues: write
+      # Lanza la CI sobre la rama del PR de release (ver abajo).
+      actions: write
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: rp
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      # Lo que se hace con GITHUB_TOKEN no dispara otros workflows: sin esto, el
+      # PR de release nunca tendría el check ci-ok que exige la protección de
+      # main. workflow_dispatch es la excepción a esa regla.
+      - name: CI en el PR de release
+        if: steps.rp.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+
+  artefactos:
+    name: Artefactos del mapa
+    needs: release-please
+    # !cancelled(): en workflow_dispatch release-please se salta y este job igual corre.
+    if: >-
+      !cancelled() && (
+        needs.release-please.outputs.release_created == 'true' ||
+        github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      # Donde se publica cada versión (issue #9): los estilos llevan escrita
+      # <TILES_BASE_URL>/vX.Y.Z. Se cambia con la variable de repositorio TILES_BASE_URL.
+      TILES_BASE_URL: ${{ vars.TILES_BASE_URL || 'https://tiles.veniroldanillo.co' }}
+    steps:
+      - name: Versión
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::tag inválido: '$TAG'"; exit 1; }
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null || { echo "::error::no existe la release $TAG"; exit 1; }
+          echo "VERSION=${TAG#v}" >>"$GITHUB_ENV"
+      # Una versión publicada no cambia de datos. Si la release ya tiene
+      # manifest.json (un re-adjunto), se extrae la misma build de Protomaps y
+      # el extracto tiene que dar el mismo SHA-256; si no, la más reciente.
+      - name: Build de Protomaps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if ! grep -qx manifest.json <<<"$assets"; then
+            echo "Release sin manifest.json: build más reciente de Protomaps"
+            exit 0
+          fi
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern manifest.json --dir "$RUNNER_TEMP/publicado"
+          manifest="$RUNNER_TEMP/publicado/manifest.json"
+          build="$(jq -r '.protomaps_build' "$manifest")"
+          sha="$(jq -r '.pmtiles as $f | .files[] | select(.name == $f) | .sha256' "$manifest")"
+          [[ "$build" =~ ^[0-9]{8}$ && "$sha" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::manifest.json publicado sin build o SHA-256 válidos"; exit 1; }
+          echo "Release ya publicada con la build $build: se reconstruye con esa"
+          echo "BUILD_DATE=$build" >>"$GITHUB_ENV"
+          echo "PUBLISHED_PMTILES_SHA=$sha" >>"$GITHUB_ENV"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Usuario del runner para el contenedor
+        run: |
+          echo "HOST_UID=$(id -u)" >>"$GITHUB_ENV"
+          echo "HOST_GID=$(id -g)" >>"$GITHUB_ENV"
+          mkdir -p node_modules
+      - uses: docker/setup-buildx-action@v4
+      - name: Imagen de herramientas
+        uses: docker/build-push-action@v7
+        with:
+          context: docker/tools
+          tags: veni-mapa-tools
+          load: true
+          cache-from: type=gha,scope=tools
+          cache-to: type=gha,scope=tools,mode=max
+      - name: Caché de recursos de terceros
+        uses: actions/cache@v6
+        with:
+          path: build/cache/assets
+          key: assets-${{ hashFiles('config/assets.lock') }}
+      - name: make extract assets style
+        run: |
+          docker compose run --rm tools make extract assets style \
+            STYLE_BASE_URL="$TILES_BASE_URL/v$VERSION" STYLE_VERSION="$VERSION"
+      # Lo que se adjunta pasa por la misma verificación que en CI.
+      - name: make verify
+        run: docker compose run --rm tools make verify
+      - name: make release
+        run: docker compose run --rm tools make release RELEASE_VERSION="$VERSION"
+      - name: Verificación de dist/
+        run: |
+          (cd dist && sha256sum -c SHA256SUMS)
+          jq -e --arg v "$VERSION" '.version == $v' dist/manifest.json
+          if [[ -n "${PUBLISHED_PMTILES_SHA:-}" ]]; then
+            jq -e --arg sha "$PUBLISHED_PMTILES_SHA" '.pmtiles as $f | .files[] | select(.name == $f) | .sha256 == $sha' dist/manifest.json \
+              || { echo "::error::el extracto reconstruido no coincide con el publicado en $TAG"; exit 1; }
+          fi
+          jq . dist/manifest.json
+      - name: Adjuntar a la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ env.TAG }}
+          path: dist
+          retention-days: 7
