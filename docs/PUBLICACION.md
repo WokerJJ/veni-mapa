@@ -26,7 +26,16 @@ PMTiles no pide tiles sueltos: pide **rangos de bytes** de un solo archivo (`Ran
 
 **Rangos HTTP y CORS:** el último paso del workflow pide `bytes=0-15` del `.pmtiles` publicado (con reintentos, mientras el CDN propaga) y falla si la respuesta no es `206`, si falta `Content-Range: bytes 0-15/…` o si falta `Access-Control-Allow-Origin: *`.
 
-Resultado del primer despliegue: *se registra aquí después de fusionar el PR #26.*
+Resultado del primer despliegue (2026-09-30, run [36603785443](https://github.com/WokerJJ/veni-mapa/actions/runs/36603785443), commit `3264aea`), en el primer intento:
+
+```text
+GET https://wokerjj.github.io/veni-mapa/roldanillo.pmtiles   Range: bytes=0-15
+HTTP/2 206
+content-range: bytes 0-15/1652451
+access-control-allow-origin: *
+```
+
+Pages sirve rangos y CORS abierto: el PMTiles funciona servido directo desde Pages. La demo publicada abre dibujada, con los estilos apuntando a `https://wokerjj.github.io/veni-mapa` y la cámara limitada a la región.
 
 Límites de Pages que importan aquí: sitio de hasta 1 GB y 100 GB de tráfico al mes (blando). El sitio pesa unos 9 MB, así que sirve para la demo, pero no es un CDN de producción: la app usa Cloudflare R2 (abajo).
 
