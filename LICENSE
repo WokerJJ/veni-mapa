@@ -1,0 +1,23 @@
+Copyright (c) 2026 Jhon Hucker Chalarca Ramírez. Todos los derechos reservados.
+
+CÓDIGO
+El código fuente de este repositorio (scripts, Makefile, Dockerfile, workflows,
+generadores de estilo y la demo), su documentación, la marca "Vení Roldanillo",
+su logo, su paleta y demás elementos de identidad visual son propiedad exclusiva
+del autor. No se concede ninguna licencia de uso, copia, modificación,
+distribución ni explotación comercial sin autorización previa y por escrito
+del autor.
+
+DATOS DEL MAPA
+Los datos cartográficos provienen de OpenStreetMap (© colaboradores de
+OpenStreetMap) y se distribuyen bajo la Open Database License (ODbL) 1.0:
+https://opendatacommons.org/licenses/odbl/1-0/
+El archivo PMTiles publicado en las releases es una obra derivada de esos datos
+y conserva la licencia ODbL. La reserva de derechos de arriba no se aplica a
+esos datos. Toda visualización del mapa debe mostrar la atribución
+"© colaboradores de OpenStreetMap".
+
+COMPONENTES DE TERCEROS
+Las tipografías, los glyphs, los sprites y las librerías de terceros incluidos o
+descargados por el pipeline conservan sus propias licencias. El detalle está en
+THIRD_PARTY_NOTICES.md y en la carpeta licenses/.
