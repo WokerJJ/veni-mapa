@@ -90,13 +90,20 @@ jobs:
           key: assets-${{ hashFiles('config/assets.lock') }}
       - name: make assets
         run: docker compose run --rm tools make assets
+      # Tipos, pruebas de Node y licencias de vendor/ al día. Instala además
+      # node_modules, que necesita la suite de site.sh.
+      - name: make check
+        run: docker compose run --rm tools make check
+      # npm ci no reescribe el lock; esto además detecta cualquier otro paso que lo haga.
+      - name: package.json y package-lock.json sin cambios
+        run: git diff --exit-code -- package.json package-lock.json
       # Sin red: las pruebas usan índices y recursos locales. La prueba completa
       # de assets.sh usa las fuentes que dejó make assets, y aquí no puede omitirse.
       - name: Pruebas en la imagen
         run: |
           for test in tests/*_test.sh; do
             echo "::group::$test"
-            docker compose run --rm -e ASSETS_TEST_REQUIRE_FULL=1 tools bash "$test"
+            docker compose run --rm -e ASSETS_TEST_REQUIRE_FULL=1 -e SITE_TEST_REQUIRE_DEPS=1 tools bash "$test"
             echo "::endgroup::"
           done
       - name: Verificación de los recursos
@@ -122,12 +129,6 @@ jobs:
           jq -e '.glyphs_sha256 | test("^[0-9a-f]{64}$")' build/assets/assets.json
       - name: make extract
         run: docker compose run --rm tools make extract
-      # Tipos y pruebas del generador (sin red) y los cuatro estilos.
-      - name: make check
-        run: docker compose run --rm tools make check
-      # npm ci no reescribe el lock; esto además detecta cualquier otro paso que lo haga.
-      - name: package.json y package-lock.json sin cambios
-        run: git diff --exit-code -- package.json package-lock.json
       - name: make style
         run: docker compose run --rm tools make style STYLE_BASE_URL="$STYLE_BASE_URL"
         env:
@@ -166,11 +167,20 @@ jobs:
       - name: make site
         run: docker compose run --rm tools make site STYLE_BASE_URL=https://tiles.example.com/ci
       - name: Verificación del sitio
+        shell: bash
         run: |
-          for file in index.html demo.js demo.css vendor/maplibre-gl.mjs vendor/maplibre-gl-worker.mjs             vendor/maplibre-gl-shared.mjs vendor/pmtiles.js style/veni-claro-es.json build.json assets.json             licenses/maplibre-gl-BSD-3.txt licenses/pmtiles-BSD-3.txt "$(yq -r .name config/region.yml).pmtiles"; do
+          set -euo pipefail
+          region="$(yq -r .name config/region.yml)"
+          files=(
+            index.html demo.js demo.css
+            vendor/maplibre-gl.mjs vendor/maplibre-gl-shared.mjs vendor/maplibre-gl-worker.mjs vendor/maplibre-gl.css vendor/pmtiles.js
+            style/veni-claro-es.json style/veni-claro-en.json style/veni-oscuro-es.json style/veni-oscuro-en.json
+            build.json assets.json "$region.pmtiles" sprites/light.png sprites/dark@2x.png "fonts/Figtree Regular/0-255.pbf"
+            licenses/maplibre-gl-BSD-3.txt licenses/pmtiles-BSD-3.txt licenses/vendor-deps.txt
+          )
+          for file in "${files[@]}"; do
             test -s "build/site/$file" || { echo "::error::falta build/site/$file"; exit 1; }
           done
-          test -d "build/site/fonts/Figtree Regular" && test -s build/site/sprites/light.png
       - uses: actions/upload-artifact@v7
         with:
           name: extracto
