@@ -11,6 +11,9 @@ pass() { echo "ok   - $1"; }
 fail() { echo "FAIL - $1"; failures=$((failures + 1)); }
 
 export DOCKER_HUB_API="file://$tmp/api"
+# "Ahora" fijo: las fechas de las pruebas no envejecen con el calendario.
+NOW="$(date -u -d 2026-09-30T00:00:00Z +%s)"
+export NOW
 dockerfile="$tmp/Dockerfile"
 mkdir -p "$tmp/api/node/tags"
 
@@ -69,7 +72,38 @@ MAX_AGE_DAYS=40 expect_output "MAX_AGE_DAYS cambia el límite" "al día"
 setup 3.23 22 2026-09-10T00:00:00Z 2026-09-18T00:00:00Z
 expect_output "usa NODE_MAJOR y ALPINE_VERSION del Dockerfile" "node:22-alpine3.23 al día"
 
+# La mayor de Node sin soporte: las dos etiquetas se congelan juntas.
+setup 3.24 24 2026-05-01T00:00:00Z 2026-05-01T00:00:00Z
+expect_output "flotante sin push en 152 días: avisa por la mayor" "::warning title=Imagen de herramientas::node:24-alpine no recibe push desde 2026-05-01 (152 días)"
+out="$(scripts/node-tag-age.sh "$dockerfile" 2>&1)"
+[[ "$out" == *"NODE_MAJOR"* && "$out" != *"no recibe parches desde"* ]] \
+  && pass "el aviso de la mayor pide revisar NODE_MAJOR, no ALPINE_VERSION" || fail "aviso de la mayor: $out"
+setup 3.24 24 2026-07-02T00:00:00Z 2026-07-02T00:00:00Z
+expect_output "flotante con 90 días: al día" "al día"
+setup 3.24 24 2026-07-01T00:00:00Z 2026-07-01T00:00:00Z
+expect_output "flotante con 91 días: avisa" "node:24-alpine no recibe push desde 2026-07-01 (91 días)"
+MAX_FLOATING_AGE_DAYS=200 expect_output "MAX_FLOATING_AGE_DAYS cambia el límite" "al día"
+
+# Los avisos también quedan en el resumen de la corrida.
+summary="$tmp/summary.md"
+setup 3.22 24 2026-05-21T23:38:48.9Z 2026-09-18T02:39:03.9Z
+: >"$summary"
+GITHUB_STEP_SUMMARY="$summary" scripts/node-tag-age.sh "$dockerfile" >/dev/null 2>&1
+grep -q "node:24-alpine3.22 no recibe parches desde 2026-05-21" "$summary" \
+  && pass "el aviso va al resumen de la corrida" || fail "resumen: $(cat "$summary")"
+setup 3.24 24 2026-09-18T00:00:00Z 2026-09-18T00:00:00Z
+: >"$summary"
+GITHUB_STEP_SUMMARY="$summary" scripts/node-tag-age.sh "$dockerfile" >/dev/null 2>&1
+[[ ! -s "$summary" ]] && pass "al día: el resumen queda vacío" || fail "resumen sin aviso: $(cat "$summary")"
+
 # --- Errores ------------------------------------------------------------------
+
+# Un fallo también es un aviso: "sin aviso" no puede significar "no se comprobó".
+setup 3.24 24 2026-09-18T00:00:00Z ""
+: >"$summary"
+out="$(GITHUB_STEP_SUMMARY="$summary" scripts/node-tag-age.sh "$dockerfile" 2>&1)"
+[[ "$out" == *"::warning title=Imagen de herramientas::No se pudo comprobar"* ]] && grep -q "No se pudo comprobar" "$summary" \
+  && pass "un fallo emite ::warning:: y va al resumen" || fail "fallo sin aviso: $out / $(cat "$summary")"
 
 setup 3.24 24 2026-09-18T00:00:00Z ""
 expect_error "falta la etiqueta flotante" "no se pudo leer $DOCKER_HUB_API/node/tags/24-alpine"
@@ -87,6 +121,12 @@ expect_error "respuesta que no es JSON" "no es JSON válido"
 echo '{"tag_last_pushed": "2026-13-45T00:00:00Z"}' >"$tmp/api/node/tags/24-alpine"
 expect_error "fecha imposible" "fecha inválida"
 
+# date -d interpreta texto relativo después de la fecha: solo se acepta ISO 8601 exacto.
+for bad in "2026-09-18T00:00:00Z +400 days" "2026-09-18T00:00:00Z -1 year" "2026-09-18T00:00:00" "2026-09-18"; do
+  echo "{\"tag_last_pushed\": \"$bad\"}" >"$tmp/api/node/tags/24-alpine"
+  expect_error "fecha '$bad'" "no trae tag_last_pushed"
+done
+
 for bad in "3" "3.24;rm" "latest"; do
   setup "$bad" 24 2026-09-18T00:00:00Z 2026-09-18T00:00:00Z
   expect_error "ALPINE_VERSION '$bad'" "ALPINE_VERSION en $dockerfile debe ser X.Y"
@@ -96,7 +136,14 @@ setup 3.24 "24-slim" 2026-09-18T00:00:00Z 2026-09-18T00:00:00Z
 expect_error "NODE_MAJOR no numérico" "NODE_MAJOR en $dockerfile debe ser un número"
 
 setup 3.24 24 2026-09-18T00:00:00Z 2026-09-18T00:00:00Z
-MAX_AGE_DAYS=abc expect_error "MAX_AGE_DAYS no numérico" "MAX_AGE_DAYS debe ser un entero"
+# Con cero adelante bash leería octal (08 falla, 010 vale 8): se rechaza.
+for bad in abc 08 010 1000000; do
+  MAX_AGE_DAYS="$bad" expect_error "MAX_AGE_DAYS '$bad'" "MAX_AGE_DAYS debe ser un entero"
+  MAX_FLOATING_AGE_DAYS="$bad" expect_error "MAX_FLOATING_AGE_DAYS '$bad'" "MAX_FLOATING_AGE_DAYS debe ser un entero"
+done
+MAX_AGE_DAYS=0 expect_output "MAX_AGE_DAYS 0 es válido" "al día"
+MAX_AGE_DAYS= expect_output "vacío usa el valor por defecto" "al día"
+NOW=ayer expect_error "NOW no numérico" "NOW debe ser"
 
 if out="$(scripts/node-tag-age.sh "$tmp/no-existe" 2>&1)"; then
   fail "Dockerfile inexistente: debía fallar"
