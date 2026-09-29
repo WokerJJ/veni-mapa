@@ -23,12 +23,21 @@ jobs:
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
 
+  region:
+    name: Región (config/region.yml)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # yq v4 (mikefarah) viene instalado en los runners de Ubuntu.
+      - name: Pruebas de scripts/region.sh
+        run: bash tests/region_test.sh
+
   # Único check obligatorio en la protección de main: agrega el resultado de
   # todos los jobs, así sumar jobs nuevos no obliga a tocar la protección.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [actionlint]
+    needs: [actionlint, region]
     runs-on: ubuntu-latest
     steps:
       - name: Todos los jobs pasaron
