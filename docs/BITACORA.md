@@ -89,3 +89,21 @@ Diario de avance por bloques (máximo 3 issues por bloque).
 - Esta sesión corrió en un contenedor en la nube: sin GraphQL (el tablero no se pudo mover a *Hecho*) y sin red hacia Alpine ni Protomaps. El pipeline completo se validó en la CI.
 
 **Sigue:** #37 (PR de release y de datos sin aprobación manual), #11 README y guía para contribuir a OSM, #27 Dependabot. El PR de release #38 (0.2.0) está abierto y espera tu decisión. Después, v0.2.0 · Rutas (#29).
+
+## 2026-09-29 · Bloque 4: PR del bot, versiones y Dependabot
+
+**Issues cerrados:** #37 PR del bot (PR #43), #42 versiones 0.1.x (PR #44), #27 Dependabot y alineación de la imagen (PR #45).
+
+**Qué quedó**
+
+- `release.yml` sin el paso de dispatch que rompía cada release; el job `release-please` vuelve a terminar en verde. release-please y la actualización mensual pueden usar una GitHub App opcional (`RELEASE_APP_CLIENT_ID` y `RELEASE_APP_PRIVATE_KEY`) para que la CI de sus PR corra sola; sin ella, *Approve and run* a mano (README).
+- Antes de 1.0 cualquier commit visible sube el parche: el PR de release pasó de 0.2.0 a **0.1.1**. La 0.2.0 se fuerza con `Release-As` al cerrar el milestone de rutas.
+- La imagen declara `ALPINE_VERSION` y `NODE_MAJOR` una sola vez; Dependabot no propone `alpine` ni `node` ni mayores de `@types/node`.
+
+**Revisión del trabajo de la sesión online (bloque 3)**
+
+- Se limpiaron los pies de "generado por" en issues, PR y comentarios; el commit `7fcc925` de `main` conserva los suyos (no se reescribe `main`).
+- Tablero al día (#8, #9 y #10 en *Hecho*) y rama de prueba `chore/actualizar-extracto` borrada.
+- Verificación completa en local: pipeline, 212 pruebas de Node, 8 suites de shell, `make verify` y render (8/8). La release v0.1.0 pasa `sha256sum -c`.
+
+**Sigue:** #47 subir la imagen a una Alpine con parches de Node (alta), #46 el PR mensual de datos no dispara release, #11 README y guía de OSM, y publicar 0.1.1 (PR #38).
