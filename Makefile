@@ -2,7 +2,7 @@
 #
 # Se ejecuta dentro de la imagen de herramientas, sin instalar nada más:
 #   docker compose run --rm tools make <objetivo>
-# (En Linux o macOS con bash, curl, jq, yq v4 y pmtiles también corre directo.)
+# (En Linux o macOS con bash, curl, jq, yq v4, pmtiles y font-maker también corre directo.)
 
 SHELL := bash
 .SHELLFLAGS := -euo pipefail -c
