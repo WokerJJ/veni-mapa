@@ -80,8 +80,10 @@ export PATH="$tmp/bin:$PATH" FAKE_S3="$tmp/s3" AWS_CALLS="$tmp/calls" AWS_ENV="$
 make_release() {
   local version="$1" build="$tmp/build" dist="$tmp/dist-$1"
   rm -rf "$build"
-  mkdir -p "$build/style" "$build/assets/fonts/Figtree Regular" "$build/assets/sprites" "$build/assets/licenses"
+  mkdir -p "$build/style" "$build/assets/fonts/Figtree Regular" "$build/assets/sprites" "$build/assets/licenses" "$build/routing"
   printf 'tiles %s' "$version" >"$build/prueba.pmtiles"
+  echo '{"format":"veni-rutas","version":1}' >"$build/routing/prueba-rutas.json"
+  echo '{"osm_date":"20260928","source":"file:///colombia-260928.osm.pbf"}' >"$build/routing/source.json"
   jq -n --arg sha "$(sha256sum "$build/prueba.pmtiles" | cut -d' ' -f1)" \
     '{region: "prueba", protomaps_build: "20260929", bbox: [-76.3, 4.3, -76, 4.55], requested_maxzoom: 16, source_maxzoom: 15, sha256: $sha}' >"$build/build.json"
   for variant in claro oscuro; do
@@ -143,7 +145,7 @@ if run 0.2.0; then pass "publica con los cuatro secrets"; else fail "publica: $o
 [[ "$(sort -u "$AWS_ENDPOINTS")" == "https://$account.r2.cloudflarestorage.com" ]] && pass "endpoint de la cuenta" || fail "endpoint: $(sort -u "$AWS_ENDPOINTS")"
 
 # Cada archivo del árbol se sube una sola vez por prefijo, con su tipo y su caché.
-tree_files=(prueba.pmtiles veni-claro-es.json veni-claro-en.json veni-oscuro-es.json veni-oscuro-en.json manifest.json
+tree_files=(prueba.pmtiles prueba-rutas.json veni-claro-es.json veni-claro-en.json veni-oscuro-es.json veni-oscuro-en.json manifest.json
   SHA256SUMS assets.tar.gz assets.json "fonts/Figtree Regular/0-255.pbf" sprites/light.json sprites/light.png licenses/Figtree-OFL.txt
   licenses/protomaps-basemaps-BSD-3.txt licenses/THIRD_PARTY_NOTICES.md)
 declare -A expected_type=([pmtiles]=application/vnd.pmtiles [json]=application/json [pbf]=application/x-protobuf

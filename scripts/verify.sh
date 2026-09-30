@@ -6,14 +6,20 @@
 #             igual a mín(REGION_MAXZOOM, zoom de la build), las capas que usan
 #             los estilos, y build.json que corresponde a este archivo
 #   Tamaño    el extracto no pasa de PMTILES_MAX_MB
+#   Rutas     el grafo (make routing): formato, región, misma fecha de OSM que
+#             source.json, ODbL, gzip de hasta ROUTING_MAX_KB y una red conectada
+#             desde el centro de la región (scripts/routing/verify.ts)
 #
-# Lee REGION_NAME, REGION_BBOX, REGION_MAXZOOM (config/region.yml, vía make),
-# BUILD_DIR y PMTILES_MAX_MB. Reporta todos los problemas y falla al final.
+# Lee REGION_NAME, REGION_BBOX, REGION_MAXZOOM y REGION_CENTER (config/region.yml,
+# vía make), BUILD_DIR, PMTILES_MAX_MB y ROUTING_MAX_KB. Reporta todos los
+# problemas y falla al final.
 set -euo pipefail
 
 : "${REGION_NAME:?falta REGION_NAME (usá make verify)}" "${REGION_BBOX:?falta REGION_BBOX}" "${REGION_MAXZOOM:?falta REGION_MAXZOOM}"
+: "${REGION_CENTER:?falta REGION_CENTER}"
 build_dir="${BUILD_DIR:-build}"
 max_mb="${PMTILES_MAX_MB:-50}"
+max_kb="${ROUTING_MAX_KB:-500}"
 validator="${GL_STYLE_VALIDATE:-node_modules/.bin/gl-style-validate}"
 
 problems=0
@@ -27,6 +33,7 @@ problem() {
 # rompe la aritmética (y el bloque que la contiene se saltaría en silencio).
 [[ "$max_mb" =~ ^(0|[1-9][0-9]{0,5})$ ]] \
   || { echo "verify.sh: PMTILES_MAX_MB debe ser un entero sin ceros a la izquierda (recibido: '$max_mb')" >&2; exit 1; }
+[[ "$max_kb" =~ ^(0|[1-9][0-9]{0,5})$ ]]   || { echo "verify.sh: ROUTING_MAX_KB debe ser un entero sin ceros a la izquierda (recibido: '$max_kb')" >&2; exit 1; }
 [[ -x "$validator" ]] || { echo "verify.sh: falta $validator (npm ci)" >&2; exit 1; }
 
 # --- Estilos ----------------------------------------------------------------------
@@ -115,8 +122,19 @@ else
   ((bytes <= limit)) && ok "tamaño $bytes bytes (límite $max_mb MB)" || problem "tamaño $bytes bytes supera el límite de $max_mb MB"
 fi
 
+# --- Rutas ------------------------------------------------------------------------
+
+graph="$build_dir/routing/$REGION_NAME-rutas.json"
+source="$build_dir/routing/source.json"
+if [[ ! -f "$graph" || ! -f "$source" ]]; then
+  problem "falta $graph o $source (make routing)"
+else
+  # verify.ts imprime sus propias líneas ok/FAIL; aquí solo se cuenta si falló.
+  node scripts/routing/verify.ts --graph "$graph" --source "$source" --region "$REGION_NAME"     --center="$REGION_CENTER" --max-kb "$max_kb" || problem "el grafo de rutas no pasó la verificación"
+fi
+
 if ((problems > 0)); then
   echo "verify.sh: $problems problema(s)" >&2
   exit 1
 fi
-echo "==> Listo: estilos y extracto verificados"
+echo "==> Listo: estilos, extracto y rutas verificados"

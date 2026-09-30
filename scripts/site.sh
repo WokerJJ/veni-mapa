@@ -4,6 +4,7 @@
 #   index.html, demo.js, demo.css      demo/
 #   vendor/                            MapLibre GL y PMTiles, autohospedados
 #   <región>.pmtiles, build.json       make extract
+#   <región>-rutas.json                make routing (grafo de calles para rutas)
 #   fonts/, sprites/, licenses/, assets.json   make assets
 #   style/                             make style (con la STYLE_BASE_URL de esta publicación)
 #
@@ -37,6 +38,8 @@ require() {
 pmtiles="$build_dir/$REGION_NAME.pmtiles"
 require "$pmtiles" "corré make extract"
 require "$build_dir/build.json" "corré make extract"
+routing="$build_dir/routing/$REGION_NAME-rutas.json"
+require "$routing" "corré make routing"
 require "$build_dir/assets/fonts" "corré make assets"
 require "$build_dir/assets/sprites" "corré make assets"
 require "$build_dir/assets/licenses" "corré make assets"
@@ -71,7 +74,7 @@ cp node_modules/maplibre-gl/dist/maplibre-gl.mjs \
   node_modules/pmtiles/dist/pmtiles.js \
   "$tmp/vendor/"
 
-cp "$pmtiles" "$build_dir/build.json" "$tmp/"
+cp "$pmtiles" "$build_dir/build.json" "$routing" "$tmp/"
 cp -R "$build_dir/assets/fonts" "$build_dir/assets/sprites" "$tmp/"
 cp "$build_dir/assets/assets.json" "$tmp/"
 cp -R "$build_dir/style" "$tmp/style"

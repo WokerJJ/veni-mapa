@@ -17,8 +17,10 @@ base=https://tiles.example.com/v0.1.0
 # Estado válido; cada caso cambia una sola cosa.
 reset() {
   rm -rf "$BUILD_DIR" "$DIST_DIR"
-  mkdir -p "$BUILD_DIR/style" "$BUILD_DIR/assets/fonts/Figtree Regular" "$BUILD_DIR/assets/sprites" "$BUILD_DIR/assets/licenses"
+  mkdir -p "$BUILD_DIR/style" "$BUILD_DIR/assets/fonts/Figtree Regular" "$BUILD_DIR/assets/sprites" "$BUILD_DIR/assets/licenses" "$BUILD_DIR/routing"
   printf 'tiles' >"$BUILD_DIR/prueba.pmtiles"
+  echo '{"format":"veni-rutas","version":1}' >"$BUILD_DIR/routing/prueba-rutas.json"
+  jq -n '{region: "prueba", osm_date: "20260928", source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf"}'     >"$BUILD_DIR/routing/source.json"
   jq -n --arg sha "$(sha256sum "$BUILD_DIR/prueba.pmtiles" | cut -d' ' -f1)" \
     '{region: "prueba", protomaps_build: "20260929", bbox: [-76.3, 4.3, -76, 4.55],
       requested_maxzoom: 16, source_maxzoom: 15, bytes: 5, sha256: $sha}' >"$BUILD_DIR/build.json"
@@ -57,21 +59,22 @@ expect_problem() {
 reset
 if out="$(scripts/release.sh 2>&1)"; then pass "release válida"; else fail "release válida: $out"; fi
 
-expected=(SHA256SUMS assets.tar.gz manifest.json prueba.pmtiles veni-claro-en.json veni-claro-es.json veni-oscuro-en.json veni-oscuro-es.json)
+expected=(SHA256SUMS assets.tar.gz manifest.json prueba-rutas.json prueba.pmtiles veni-claro-en.json veni-claro-es.json veni-oscuro-en.json veni-oscuro-es.json)
 actual=()
 while IFS= read -r f; do actual+=("$f"); done < <(ls "$DIST_DIR" | LC_ALL=C sort)
-[[ "${actual[*]}" == "${expected[*]}" ]] && pass "dist/ tiene exactamente los 8 archivos" || fail "dist/ tiene: ${actual[*]}"
+[[ "${actual[*]}" == "${expected[*]}" ]] && pass "dist/ tiene exactamente los 9 archivos" || fail "dist/ tiene: ${actual[*]}"
 
 (cd "$DIST_DIR" && sha256sum -c --quiet SHA256SUMS) >/dev/null 2>&1 && pass "SHA256SUMS verifica" || fail "SHA256SUMS no verifica"
-[[ "$(wc -l <"$DIST_DIR/SHA256SUMS")" == 7 ]] && pass "SHA256SUMS cubre los otros 7 archivos" || fail "SHA256SUMS: $(cat "$DIST_DIR/SHA256SUMS")"
+[[ "$(wc -l <"$DIST_DIR/SHA256SUMS")" == 8 ]] && pass "SHA256SUMS cubre los otros 8 archivos" || fail "SHA256SUMS: $(cat "$DIST_DIR/SHA256SUMS")"
 
 jq -e --arg base "$base" '
   .version == "0.1.0" and .region == "prueba" and .protomaps_build == "20260929"
   and .bbox == [-76.3, 4.3, -76, 4.55] and .maxzoom == 15 and .style_base_url == $base
-  and .pmtiles == "prueba.pmtiles" and (.styles | length) == 4
+  and .pmtiles == "prueba.pmtiles" and (.styles | length) == 4 and (.styles | all(startswith("veni-")))
+  and .routing == {file: "prueba-rutas.json", osm_date: "20260928", source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf"}
   and .data_license == "ODbL-1.0" and .attribution == "© colaboradores de OpenStreetMap"
-  and (.files | length) == 6' "$DIST_DIR/manifest.json" >/dev/null \
-  && pass "manifest.json con versión, build, bbox, zoom y base" || fail "manifest.json: $(cat "$DIST_DIR/manifest.json")"
+  and (.files | length) == 7' "$DIST_DIR/manifest.json" >/dev/null \
+  && pass "manifest.json con versión, build, bbox, zoom, base y rutas" || fail "manifest.json: $(cat "$DIST_DIR/manifest.json")"
 
 # Cada archivo del manifest coincide con el de dist/.
 ok=1
@@ -123,6 +126,10 @@ expect_problem "extracto distinto al de build.json" "no coincide con el SHA-256"
 reset
 rm "$BUILD_DIR/style/veni-oscuro-es.json"
 expect_problem "falta un estilo" "veni-oscuro-es.json"
+
+reset
+rm "$BUILD_DIR/routing/prueba-rutas.json"
+expect_problem "falta el grafo de rutas" "corré make routing"
 
 reset
 rm -r "$BUILD_DIR/assets/sprites"
