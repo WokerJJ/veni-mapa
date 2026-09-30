@@ -3,6 +3,7 @@
 #
 #   index.html, demo.js, demo.css      demo/
 #   vendor/                            MapLibre GL y PMTiles, autohospedados
+#   vendor/rutas/                      el router de scripts/routing en JavaScript (browser.ts)
 #   <región>.pmtiles, build.json       make extract
 #   <región>-rutas.json                make routing (grafo de calles para rutas)
 #   fonts/, sprites/, licenses/, assets.json   make assets
@@ -73,6 +74,7 @@ cp node_modules/maplibre-gl/dist/maplibre-gl.mjs \
   node_modules/maplibre-gl/dist/maplibre-gl.css \
   node_modules/pmtiles/dist/pmtiles.js \
   "$tmp/vendor/"
+node --no-warnings scripts/routing/browser.ts "$tmp/vendor/rutas"
 
 cp "$pmtiles" "$build_dir/build.json" "$routing" "$tmp/"
 cp -R "$build_dir/assets/fonts" "$build_dir/assets/sprites" "$tmp/"

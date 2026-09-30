@@ -68,7 +68,7 @@ if out="$(run_site "$base")"; then
   site="$BUILD_DIR/site"
   missing=()
   for file in index.html demo.js demo.css \
-    vendor/maplibre-gl.mjs vendor/maplibre-gl-shared.mjs vendor/maplibre-gl-worker.mjs vendor/maplibre-gl.css vendor/pmtiles.js \
+    vendor/maplibre-gl.mjs vendor/maplibre-gl-shared.mjs vendor/maplibre-gl-worker.mjs vendor/maplibre-gl.css vendor/pmtiles.js vendor/rutas/router.js vendor/rutas/graph.js \
     prueba.pmtiles prueba-rutas.json build.json assets.json "fonts/Figtree Regular/0-255.pbf" sprites/light.json \
     style/veni-claro-es.json style/veni-claro-en.json style/veni-oscuro-es.json style/veni-oscuro-en.json \
     licenses/Figtree-OFL.txt licenses/maplibre-gl-BSD-3.txt licenses/pmtiles-BSD-3.txt licenses/vendor-deps.txt; do

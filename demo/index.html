@@ -29,7 +29,18 @@
       </div>
     </header>
     <!-- MapLibre le pone al lienzo su propio nombre accesible (y demo.js lo traduce). -->
-    <main class="principal"><div id="mapa"></div></main>
+    <main class="principal">
+      <div id="mapa"></div>
+      <!-- Ruta desde la posición del usuario al punto que toque (grafo de make routing). -->
+      <section class="ruta" aria-labelledby="ruta-titulo">
+        <h2 id="ruta-titulo" class="solo-lectores" data-i18n="rutaTitulo">Ruta</h2>
+        <div class="grupo" role="group" aria-label="Cómo ir" data-i18n-aria="comoIr">
+          <button type="button" data-perfil="foot" data-i18n="aPie">A pie</button>
+          <button type="button" data-perfil="car" data-i18n="enCarro">En carro</button>
+        </div>
+        <p id="ruta-estado" class="ruta-estado" role="status"></p>
+      </section>
+    </main>
     <noscript><p class="aviso">Este mapa necesita JavaScript. · This map needs JavaScript.</p></noscript>
   </body>
 </html>

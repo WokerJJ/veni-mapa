@@ -84,6 +84,12 @@ La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los t
 
 MapLibre GL y PMTiles autohospedados (sin CDN), botones para tema claro u oscuro y etiquetas en español o inglés, con la interfaz traducida. Lo que elegís queda en la URL (`?tema=oscuro&idioma=en`) y la vista en el fragmento (`#vista=zoom/lat/lon`); sin tema elegido, la demo sigue la preferencia del sistema, también si cambia. Los controles de MapLibre también se traducen.
 
+**Posición y rutas.** «¿Dónde estoy?» muestra tu posición (se queda en el navegador: mientras está activa, la vista deja de guardarse en la URL para que un enlace compartido no la delate) y al tocar un punto del mapa se dibuja la ruta desde ahí, a pie o en carro, con distancia y tiempo estimado. El router es el de [Rutas](#rutas), generado en JavaScript desde `scripts/routing/router.ts` y `graph.ts` al armar el sitio (`vendor/rutas/`); el grafo se baja recién al pedir la primera ruta. Es lo mismo que hará la app, probado de punta a punta en Chromium con la geolocalización simulada.
+
+| A pie, de la Alcaldía al Museo Rayo | En carro, rodeando un sentido único |
+| --- | --- |
+| ![Ruta a pie de la Alcaldía al Museo Rayo](docs/img/demo-ruta-a-pie.png) | ![Ruta en carro que rodea una calle de sentido único](docs/img/demo-ruta-en-carro.png) |
+
 La cámara no sale de la región: el extracto guarda tiles enteros y en zooms bajos un tile cubre medio continente (en el zoom 0, el planeta), así que el estilo publica la caja de `config/region.yml` en `metadata["veni:bounds"]` y la demo la usa como `maxBounds`. La app hace lo mismo. Detalles de publicación y rangos HTTP en [docs/PUBLICACION.md](docs/PUBLICACION.md).
 
 ## Usar el mapa en la app
@@ -360,17 +366,17 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 | Generador de estilos, `build.ts`, servidor, conteo de tiles, reporte de actualización, grafo y router de rutas (reglas de acceso, sentidos únicos, A* igual a Dijkstra), ejemplos del README y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
 | Rutas conocidas en Roldanillo (Alcaldía → Museo Rayo, sentido único real) | Dentro de `make verify`; sueltas: `docker compose run --rm tools node --test tests/data/rutas-roldanillo.test.ts` (después de `make routing`) | Imagen de herramientas |
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
-| Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
+| Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px. Posición y rutas con la geolocalización simulada: «¿Dónde estoy?», ruta a pie al Museo Rayo con el grafo bajado recién al tocar, sentido único real en carro, punto sin calles cerca, posición fuera de la región, cambio de tema e inglés | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
 
 El render sirve `build/site` en la base con la que se generaron los estilos (por defecto `http://localhost:8080`; si ya corre `make serve`, lo reutiliza). Para usar otro puerto, generá el sitio con esa base: `docker compose run --rm tools make style site STYLE_BASE_URL=http://localhost:8095` y después `npm run test:render`.
 
-Las capturas del README (`docs/img/demo-{claro,oscuro}-es.png`) salen de esta misma prueba: con `RENDER_CAPTURE_DIR` guarda cada captura en esa carpeta. Después de `make all`:
+Las capturas del README (`docs/img/demo-{claro,oscuro}-es.png` y `demo-ruta-*.png`) salen de estas mismas pruebas: con `RENDER_CAPTURE_DIR` guarda cada captura en esa carpeta. Después de `make all`:
 
 ```bash
-RENDER_CAPTURE_DIR=docs/img npx playwright test -g "· es: se dibuja"
+RENDER_CAPTURE_DIR=docs/img npx playwright test -g "· es: se dibuja|Museo Rayo dibuja|sentido único"
 ```
 
-En PowerShell: `$env:RENDER_CAPTURE_DIR="docs/img"; npx.cmd playwright test -g "· es: se dibuja"`.
+En PowerShell: `$env:RENDER_CAPTURE_DIR="docs/img"; npx.cmd playwright test -g "· es: se dibuja|Museo Rayo dibuja|sentido único"`.
 
 La CI corre todo lo anterior en cada PR; las suites no pueden quedar omitidas, una prueba de render que solo pasa al reintentar cuenta como fallo, y el render sube sus capturas como artefacto. Pages corre `make verify` antes de publicar.
 

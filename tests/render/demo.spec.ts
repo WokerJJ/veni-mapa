@@ -6,33 +6,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
-
-interface Style {
-  name?: string;
-  center?: [number, number];
-  zoom?: number;
-  metadata?: Record<string, unknown>;
-  layers?: { id: string; paint?: Record<string, unknown> }[];
-}
-
-declare global {
-  interface Window {
-    veniMapa: {
-      loaded(): boolean;
-      areTilesLoaded(): boolean;
-      isMoving(): boolean;
-      once(event: string, listener: () => void): void;
-      triggerRepaint(): void;
-      getZoom(): number;
-      getCenter(): { lng: number; lat: number };
-      getBounds(): { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };
-      getStyle(): Style | undefined;
-      getPaintProperty(layer: string, property: string): unknown;
-      queryRenderedFeatures(): unknown[];
-      zoomTo(zoom: number, options: { duration: number }): void;
-    };
-  }
-}
+import { collectErrors, waitForMap, type Style } from "./helpers.ts";
 
 type Tema = "claro" | "oscuro";
 type Idioma = "es" | "en";
@@ -47,20 +21,6 @@ const LABELS = {
   en: { zoomIn: "Zoom in", map: "Map of Roldanillo", title: "Vení · Roldanillo map", oscuro: "Dark" },
 } as const;
 
-/** Espera a que el mapa cargue y quede en reposo (evento idle), sin mover la cámara. */
-async function waitForMap(page: Page): Promise<void> {
-  await page.waitForFunction(() => window.veniMapa?.getStyle() !== undefined && window.veniMapa.loaded(), null, { timeout: 30_000 });
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        const map = window.veniMapa;
-        map.once("idle", () => resolve());
-        // Si ya estaba en reposo, un repintado vuelve a emitir idle.
-        if (map.loaded() && map.areTilesLoaded() && !map.isMoving()) map.triggerRepaint();
-      }),
-  );
-}
-
 // Con RENDER_CAPTURE_DIR, las capturas también se guardan ahí (las del README
 // salen de docs/img: ver "Pruebas" en el README).
 const captureDir = process.env.RENDER_CAPTURE_DIR;
@@ -74,19 +34,6 @@ async function expectDrawn(page: Page, testInfo: TestInfo, name: string): Promis
     mkdirSync(captureDir, { recursive: true });
     writeFileSync(join(captureDir, `${name}.png`), shot);
   }
-}
-
-/** Errores de la página, de consola y respuestas ≥ 400 (los avisos de WebGL no cuentan). */
-function collectErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
-  page.on("console", (message) => {
-    if (message.type() === "error") errors.push(`console: ${message.text()}`);
-  });
-  page.on("response", (response) => {
-    if (response.status() >= 400) errors.push(`HTTP ${response.status()}: ${response.url()}`);
-  });
-  return errors;
 }
 
 for (const tema of ["claro", "oscuro"] as const) {
