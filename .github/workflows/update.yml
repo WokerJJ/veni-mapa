@@ -74,9 +74,20 @@ jobs:
       # BUILD_DATE llega al contenedor por compose.yaml.
       - name: make extract
         run: docker compose run --rm tools make extract
-      # Lo que se propone pasa la misma verificación que en CI.
-      - name: make style verify
-        run: docker compose run --rm tools make style verify
+      # El extracto de Colombia de Geofabrik pesa ~330 MB: se restaura el último
+      # que guardó la CI de main. Con ROUTING_PREFER_CACHE=1, routing-source.sh lo
+      # usa mientras Geofabrik lo siga listando (y si Geofabrik no responde); si
+      # no, baja el más reciente. Siempre lo verifica con su MD5.
+      - name: Caché de OSM
+        id: osm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: build/cache/osm
+          key: osm-restaurar
+          restore-keys: osm-
+      # Lo que se propone pasa la misma verificación que en CI (que incluye las rutas).
+      - name: make routing style verify
+        run: docker compose run --rm -e ROUTING_PREFER_CACHE=1 tools make routing style verify
       # La última release que ya tiene sus archivos (manifest.json): una recién
       # creada por release-please puede no tenerlos todavía, o no haberlos
       # recibido nunca si su job de artefactos falló.

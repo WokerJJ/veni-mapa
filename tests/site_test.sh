@@ -29,8 +29,9 @@ base="https://tiles.example.com/v1"
 make_build() {
   local styled_base="$1"
   rm -rf "$BUILD_DIR"
-  mkdir -p "$BUILD_DIR/assets/fonts/Figtree Regular" "$BUILD_DIR/assets/sprites" "$BUILD_DIR/assets/licenses" "$BUILD_DIR/style"
+  mkdir -p "$BUILD_DIR/assets/fonts/Figtree Regular" "$BUILD_DIR/assets/sprites" "$BUILD_DIR/assets/licenses" "$BUILD_DIR/style" "$BUILD_DIR/routing"
   printf 'tiles' >"$BUILD_DIR/prueba.pmtiles"
+  echo '{"format":"veni-rutas"}' >"$BUILD_DIR/routing/prueba-rutas.json"
   echo '{"protomaps_build":"20260928"}' >"$BUILD_DIR/build.json"
   printf 'pbf' >"$BUILD_DIR/assets/fonts/Figtree Regular/0-255.pbf"
   echo '{}' >"$BUILD_DIR/assets/sprites/light.json"
@@ -68,12 +69,12 @@ if out="$(run_site "$base")"; then
   missing=()
   for file in index.html demo.js demo.css \
     vendor/maplibre-gl.mjs vendor/maplibre-gl-shared.mjs vendor/maplibre-gl-worker.mjs vendor/maplibre-gl.css vendor/pmtiles.js \
-    prueba.pmtiles build.json assets.json "fonts/Figtree Regular/0-255.pbf" sprites/light.json \
+    prueba.pmtiles prueba-rutas.json build.json assets.json "fonts/Figtree Regular/0-255.pbf" sprites/light.json \
     style/veni-claro-es.json style/veni-claro-en.json style/veni-oscuro-es.json style/veni-oscuro-en.json \
     licenses/Figtree-OFL.txt licenses/maplibre-gl-BSD-3.txt licenses/pmtiles-BSD-3.txt licenses/vendor-deps.txt; do
     [[ -s "$site/$file" ]] || missing+=("$file")
   done
-  ((${#missing[@]} == 0)) && pass "trae demo, vendor, datos, recursos, estilos y licencias" || fail "faltan: ${missing[*]}"
+  ((${#missing[@]} == 0)) && pass "trae demo, vendor, datos, rutas, recursos, estilos y licencias" || fail "faltan: ${missing[*]}"
   [[ -z "$(find "$site" ! -perm -a+r)" ]] && pass "todo es legible por otros usuarios" || fail "hay archivos no legibles"
   [[ ! -e "$BUILD_DIR/site.tmp" && ! -e "$BUILD_DIR/site.old" ]] && pass "no deja temporales" || fail "quedaron temporales"
 else
@@ -86,6 +87,13 @@ if out="$(run_site "https://Tiles.Example.com/v1//")"; then
 else
   fail "la misma base escrita distinto falló: $out"
 fi
+
+make_build "$base"
+rm "$BUILD_DIR/routing/prueba-rutas.json"
+expect_error "falta el grafo de rutas" "$base" "corré make routing"
+# De nuevo un sitio publicado, para los fallos que siguen.
+make_build "$base"
+run_site "$base" >/dev/null
 
 # --- Fallos: el sitio anterior queda intacto y sin temporales -------------------
 

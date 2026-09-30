@@ -9,7 +9,10 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": []
+    "types": ["geojson"],
+    // La app copia el router como un módulo propio; aquí se resuelve al original.
+    "paths": { "@veni/rutas": ["../../scripts/routing/router.ts"] },
+    "allowImportingTsExtensions": true
   },
   "include": ["*.ts"]
 }

@@ -21,7 +21,9 @@ flowchart LR
   pm -->|make extract<br/>solo rangos HTTP de la región| ext[roldanillo.pmtiles]
   lock[config/assets.lock<br/>fuentes y sprites fijados] -->|make assets<br/>font-maker| assets[glyphs y sprites]
   marca[Paleta Vení<br/>scripts/style] -->|make style| estilos[4 estilos MapLibre<br/>claro/oscuro · es/en]
+  osm2[Extracto de Colombia<br/>de Geofabrik] -->|make routing<br/>osmium| rutas[Grafo de rutas]
   ext --> verify{make verify}
+  rutas --> verify
   assets --> verify
   estilos --> verify
   verify -->|release.yml| rel[Release vX.Y.Z<br/>con manifest.json]
@@ -36,7 +38,7 @@ flowchart LR
 
 ## Requisitos
 
-- **Docker** (Docker Desktop en Windows o macOS). Es lo único necesario para generar el mapa.
+- **Docker** (Docker Desktop en Windows o macOS). Es lo único necesario para generar el mapa. `make routing` descarga una vez ~330 MB de OpenStreetMap, que quedan en caché en `build/`.
 - **Node 24** en el host, solo para la prueba de render con Playwright, que no corre en Alpine.
 
 ## Uso
@@ -51,6 +53,7 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | Objetivo | Qué hace |
 | --- | --- |
 | `extract` | Resuelve la build diaria más reciente de Protomaps, corre `pmtiles extract --dry-run` (reporte en `build/extract-report.txt`) y extrae la región a `build/<región>.pmtiles`. Deja la procedencia (build, bbox, tamaño, SHA-256) en `build/build.json`. |
+| `routing` | Descarga (en caché) el extracto de OSM de Geofabrik, recorta las vías de la región con osmium y arma el grafo de rutas en `build/routing/<región>-rutas.json` (ver [Rutas](#rutas)). |
 | `assets` | Descarga las fuentes y los sprites de [`config/assets.lock`](config/assets.lock) (fijados por commit y verificados por SHA-256) y genera en `build/assets` los glyphs de [`config/fontstacks.yml`](config/fontstacks.yml) con [font-maker](https://github.com/maplibre/font-maker). |
 | `style` | Genera `build/style/veni-{claro,oscuro}-{es,en}.json` con la marca Vení. `STYLE_BASE_URL` fija dónde se publican PMTiles, glyphs y sprites (por defecto `http://localhost:8080`). |
 | `check` | Verificación de tipos (TypeScript), pruebas de Node (estilos, `build.ts`, servidor) y que `licenses/vendor-deps.txt` esté al día. |
@@ -59,7 +62,7 @@ docker compose run --rm tools make extract   # build/roldanillo.pmtiles
 | `site` | Arma `build/site`, el árbol que se publica: demo, PMTiles, recursos, estilos y licencias. |
 | `serve` | Sirve `build/site` en <http://localhost:8080> con rangos HTTP. Necesita el puerto: `docker compose run --rm --service-ports tools make serve`. |
 | `release` | Arma `dist/` con lo que se adjunta a una release (ver [Releases](#releases)). Exige `RELEASE_VERSION=X.Y.Z` y estilos generados con `STYLE_VERSION` igual. |
-| `all` | `extract`, `assets`, `style` y `site`. |
+| `all` | `extract`, `routing`, `assets`, `style` y `site`. |
 
 Para reproducir una versión exacta, fijá la build (funciona igual en bash y en PowerShell):
 
@@ -123,6 +126,75 @@ const map = new maplibregl.Map({
 - **Atribución:** la fuente del estilo ya trae la atribución a OpenStreetMap en su idioma ("© colaboradores de OpenStreetMap" o "© OpenStreetMap contributors"); no ocultes el control de atribución de MapLibre (en móvil, `compact: true`).
 - **Versiones:** en producción conviene fijar una versión (`/vX.Y.Z/`) y actualizarla a propósito. `manifest.json` de cada release dice qué build de OpenStreetMap trae y el SHA-256 de cada archivo. Ver [Releases](#releases).
 - **Capas propias** (restaurantes, ubicación, rutas) las agrega la app encima con `map.addSource` y `map.addLayer`; este repositorio solo publica el mapa base.
+
+## Rutas
+
+`make routing` genera `roldanillo-rutas.json`, la red de calles de la región, para que la app calcule en el teléfono la ruta hasta un restaurante, sin servidor de rutas ni APIs de pago. Se publica junto al mapa (Pages y cada release) y [`scripts/routing/router.ts`](scripts/routing/router.ts) es la implementación de referencia que usa la app.
+
+**De dónde sale.** El PMTiles no sirve para rutas: su geometría está simplificada, las calles no comparten nodos en los cruces y no trae `oneway`. Por eso se parte del extracto de Colombia de [Geofabrik](https://download.geofabrik.de/south-america/colombia.html), el archivo fechado más reciente (`ROUTING_DATE=AAAAMMDD` fija otro) y verificado con su MD5:
+
+1. [`scripts/routing-source.sh`](scripts/routing-source.sh): osmium recorta la caja de `config/region.yml` (las calles que cruzan el borde quedan enteras), se queda con las vías (`highway=*`) y las escribe en OPL, con las coordenadas de sus nodos. La descarga (~330 MB) queda en caché en `build/cache/osm`.
+2. [`scripts/routing/build.ts`](scripts/routing/build.ts) arma el grafo: vértices solo en cruces y extremos de vía, y los nodos intermedios como geometría para dibujar.
+
+**Perfiles** ([`scripts/routing/graph.ts`](scripts/routing/graph.ts)):
+
+| | A pie | En vehículo |
+| --- | --- | --- |
+| Vías | Todas menos autopistas y `motorroad=yes` | De `motorway` a `track` (caminos de las veredas), sin peatonales ni senderos |
+| Sentido único | No aplica (salvo `oneway:foot`) | `oneway=yes/-1`, glorietas y autopistas |
+| Acceso | `foot`, si no `access` | `motorcar`, `motor_vehicle`, `vehicle`, si no `access` |
+| Costo | Largo a 4,5 km/h | Largo a la velocidad de cada tipo de vía (de 90 km/h en autopista a 10 km/h en `living_street`) |
+
+`private`, `no`, `agricultural` y `forestry` cierran el paso; `destination`, `customers` y `delivery` lo permiten.
+
+**Formato `veni-rutas` v1.** JSON de enteros con codificación delta (grados × 10⁶): `nodes` (vértices), `edges` (desde, hasta, largo en decímetros, banderas de perfil y sentido, tipo de vía), `geometry` y `geometry_counts` (puntos intermedios de cada arista). Pesa ~567 KB, ~215 KB con gzip (Pages y Cloudflare lo comprimen solos); `make verify` exige que no pase de `ROUTING_MAX_KB` (500), que la caja y el origen coincidan con `source.json`, que al menos el 90 % de la red esté conectada (la mayor componente fuertemente conexa de cada perfil) y corre las rutas conocidas de [`tests/data/rutas-roldanillo.test.ts`](tests/data/rutas-roldanillo.test.ts). Se eligió JSON sobre formatos como los de OSRM o GraphHopper porque esos asumen un servidor, y sobre un binario propio porque el navegador lo decodifica de forma nativa y se puede inspeccionar a mano.
+
+**En la app** (`VITE_MAP_ROUTES_URL` apunta a `roldanillo-rutas.json` de la misma publicación que los estilos). La app copia `scripts/routing/router.ts` y `graph.ts` del tag de la versión que usa (el formato lleva versión y el router rechaza otra). `router.ts` importa `./graph.ts` con extensión, así que el `tsconfig` de la app necesita `"moduleResolution": "bundler"` y `"allowImportingTsExtensions": true` (Vite lo resuelve solo). El router carga el grafo en ~40 ms y calcula una ruta en unos pocos ms (A*, la más rápida del grafo):
+
+```ts
+import type { GeoJSONSource, Map } from "maplibre-gl";
+// scripts/routing/router.ts y graph.ts del tag vX.Y.Z de veni-mapa, copiados en la app.
+import { Router, type LngLat, type Route } from "@veni/rutas";
+
+declare const map: Map; // el mapa de "Usar el mapa en la app"
+
+// El grafo (~215 KB con gzip) se descarga la primera vez que se pide una ruta,
+// no al abrir el mapa. Si la descarga falla (sin señal, portal cautivo), se
+// olvida la promesa para reintentar en la próxima ruta.
+let router: Promise<Router> | undefined;
+function loadRouter(): Promise<Router> {
+  router ??= fetch(import.meta.env.VITE_MAP_ROUTES_URL)
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`rutas: HTTP ${res.status}`);
+      return new Router(await res.json());
+    })
+    .catch((error: unknown) => {
+      router = undefined;
+      throw error;
+    });
+  return router;
+}
+
+/** Dibuja la ruta y la devuelve (distance en m, duration en s), o null si no hay. */
+export async function showRoute(from: LngLat, to: LngLat, profile: "foot" | "car"): Promise<Route | null> {
+  const route = (await loadRouter()).route(from, to, profile);
+  // Sin ruta (a más de 1 km de una vía): ofrecer abrir Google Maps o Waze.
+  if (!route) return null;
+  // route.snap dice cuántos metros hay de cada punto a la red: se dibujan aparte.
+  const data: GeoJSON.Feature = { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: route.coordinates } };
+  const source = map.getSource<GeoJSONSource>("ruta");
+  if (source) source.setData(data);
+  else {
+    map.addSource("ruta", { type: "geojson", data });
+    map.addLayer({ id: "ruta", type: "line", source: "ruta", paint: { "line-color": "#F0525A", "line-width": 5 } });
+  }
+  return route;
+}
+```
+
+`route.coordinates` es la línea para dibujar, `route.distance` y `route.duration` sirven para mostrar "1,9 km · 25 min" y `route.snap` dice cuántos metros hay entre cada punto pedido y la red. La ubicación del usuario la da el dispositivo (control de geolocalización de MapLibre) y nunca sale del teléfono.
+
+**Límites.** No es navegación paso a paso: los puntos se ajustan al cruce más cercano de la red principal (a menos de 1 km; así un punto junto a una calle aislada igual tiene ruta), no hay giros prohibidos, semáforos ni tráfico, y la duración es una estimación. Para navegar, la app ofrece abrir Google Maps o Waze por enlace. Geofabrik guarda los archivos fechados solo unos días (y el del 1 de enero de cada año), así que cada release nueva usa el más reciente y deja su procedencia en `manifest.json` (`routing.osm_date`, `source` y `source_md5`); al volver a adjuntar una release se reutiliza el grafo publicado, verificado con su SHA-256 ([`scripts/routing-published.sh`](scripts/routing-published.sh)), y nunca se rearma. En CI, Pages y la actualización mensual, `ROUTING_PREFER_CACHE=1` reusa el archivo en caché mientras Geofabrik lo siga listando (y si Geofabrik no responde).
 
 ## Estilos
 
@@ -206,9 +278,10 @@ font-maker se fija en `FONT_MAKER_COMMIT` del [Dockerfile](docker/tools/Dockerfi
 | Archivo | Contenido |
 | --- | --- |
 | `roldanillo.pmtiles` | El extracto (ODbL, © colaboradores de OpenStreetMap). |
+| `roldanillo-rutas.json` | El grafo de rutas (ODbL), ver [Rutas](#rutas). |
 | `veni-{claro,oscuro}-{es,en}.json` | Los cuatro estilos, con URLs a `<TILES_BASE_URL>/vX.Y.Z` (por defecto `https://tiles.veniroldanillo.co`, ver [docs/PUBLICACION.md](docs/PUBLICACION.md)). |
 | `assets.tar.gz` | `fonts/`, `sprites/`, `licenses/` y `assets.json`; reproducible (mismos recursos, mismo SHA-256). |
-| `manifest.json` | Versión, build de Protomaps, bbox, zoom máximo, base de los estilos, atribución y cada archivo con tamaño y SHA-256. |
+| `manifest.json` | Versión, build de Protomaps, fecha del OSM de las rutas, bbox, zoom máximo, base de los estilos, atribución y cada archivo con tamaño y SHA-256. |
 | `SHA256SUMS` | Sumas de todo lo anterior: `sha256sum -c SHA256SUMS`. |
 
 Si existen los secrets de R2, la release también se publica en `https://tiles.veniroldanillo.co/vX.Y.Z/` y `/latest/`; hoy está preparado y desactivado (ver [docs/PUBLICACION.md](docs/PUBLICACION.md#cloudflare-r2-producción)).
@@ -283,8 +356,9 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 
 | Qué | Cómo | Dónde corre |
 | --- | --- | --- |
-| Scripts del pipeline (región, extracción, recursos, sitio, verificación, release, publicación en R2, parches de Node de la imagen) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
-| Generador de estilos, `build.ts`, servidor, conteo de tiles, reporte de actualización y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
+| Scripts del pipeline (región, extracción, fuente de las rutas, grafo publicado, recursos, sitio, verificación, release, publicación en R2, parches de Node de la imagen) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
+| Generador de estilos, `build.ts`, servidor, conteo de tiles, reporte de actualización, grafo y router de rutas (reglas de acceso, sentidos únicos, A* igual a Dijkstra), ejemplos del README y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
+| Rutas conocidas en Roldanillo (Alcaldía → Museo Rayo, sentido único real) | Dentro de `make verify`; sueltas: `docker compose run --rm tools node --test tests/data/rutas-roldanillo.test.ts` (después de `make routing`) | Imagen de herramientas |
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
 | Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
 

@@ -1,0 +1,10 @@
+n1 v1 dV c0 t2026-01-01T00:00:00Z i0 u T x-76.15 y4.41
+w1 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=residential,oneway=yes,name=Calle%20%7 Nn1x-76.15y4.41,n10x-76.1495y4.4101,n11x-76.1492y4.4101,n2x-76.149y4.41,n3x-76.148y4.41
+w2 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=residential Nn4x-76.15y4.411,n5x-76.149y4.411,n6x-76.148y4.411
+w3 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=residential Nn1x-76.15y4.41,n4x-76.15y4.411
+w4 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=residential Nn3x-76.148y4.41,n6x-76.148y4.411
+w5 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=footway Nn2x-76.149y4.41,n5x-76.149y4.411
+w6 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=residential,access=private Nn1x-76.15y4.41,n5x-76.149y4.411
+w7 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=residential Nn20x-76.14y4.42,n21x-76.139y4.42
+w8 v1 dV c0 t2026-01-01T00:00:00Z i0 u Tbuilding=yes Nn40x-76.151y4.41,n41x-76.151y4.411
+w9 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=service Nn30x-76.1503y4.4098,n31x-76.1506y4.4096

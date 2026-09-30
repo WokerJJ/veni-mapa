@@ -2,9 +2,11 @@
 # `make release`: arma DIST_DIR (dist/) con lo que se adjunta a una release.
 #
 #   <región>.pmtiles                 make extract
+#   <región>-rutas.json              make routing (grafo de calles para rutas en el navegador)
 #   veni-{claro,oscuro}-{es,en}.json make style (con la base y la versión de esta release)
 #   assets.tar.gz                    fonts/, sprites/, licenses/ y assets.json de make assets
-#   manifest.json                    versión, build de Protomaps, bbox y cada archivo con su SHA-256
+#   manifest.json                    versión, build de Protomaps, fecha de OSM de las rutas, bbox
+#                                    y cada archivo con su SHA-256
 #   SHA256SUMS                       sumas de todo lo anterior (formato de sha256sum -c)
 #
 # Lo llama el workflow de release después de make all y make verify. Antes de
@@ -42,6 +44,9 @@ for dir in fonts sprites licenses; do
   require "$build_dir/assets/$dir" "corré make assets"
 done
 require "$build_dir/assets/assets.json" "corré make assets"
+routing="$build_dir/routing/$REGION_NAME-rutas.json"
+require "$routing" "corré make routing"
+require "$build_dir/routing/source.json" "corré make routing"
 
 # El extracto es el que describe build.json.
 sha="$(sha256sum "$pmtiles" | cut -d' ' -f1)"
@@ -72,7 +77,7 @@ done
 rm -rf "$tmp"
 mkdir -p "$tmp/assets/licenses"
 
-cp "$pmtiles" "$tmp/"
+cp "$pmtiles" "$routing" "$tmp/"
 for name in "${styles[@]}"; do
   cp "$build_dir/style/$name" "$tmp/"
 done
@@ -88,7 +93,7 @@ tar --create --format=gnu --sort=name --mtime=@0 --owner=0 --group=0 --numeric-o
   -C "$tmp/assets" fonts sprites licenses assets.json | gzip -n -9 >"$tmp/assets.tar.gz"
 rm -rf "$tmp/assets"
 
-files=("$REGION_NAME.pmtiles" "${styles[@]}" assets.tar.gz)
+files=("$REGION_NAME.pmtiles" "$REGION_NAME-rutas.json" "${styles[@]}" assets.tar.gz)
 file_list="$(for f in "${files[@]}"; do
   jq -n --arg name "$f" --argjson bytes "$(stat -c %s "$tmp/$f")" \
     --arg sha256 "$(sha256sum "$tmp/$f" | cut -d' ' -f1)" '{name: $name, bytes: $bytes, sha256: $sha256}'
@@ -107,11 +112,12 @@ jq -n \
     maxzoom: ([$build[0].requested_maxzoom, $build[0].source_maxzoom] | min),
     style_base_url: $base,
     pmtiles: ($build[0].region + ".pmtiles"),
-    styles: [$files[] | select(.name | endswith(".json")) | .name],
+    routing: {file: ($build[0].region + "-rutas.json"), osm_date: $routing[0].osm_date, source: $routing[0].source, source_md5: $routing[0].source_md5},
+    styles: [$files[] | select(.name | startswith("veni-")) | .name],
     data_license: "ODbL-1.0",
     attribution: "© colaboradores de OpenStreetMap",
     files: $files
-  }' --slurpfile build "$build_dir/build.json" >"$tmp/manifest.json"
+  }' --slurpfile build "$build_dir/build.json" --slurpfile routing "$build_dir/routing/source.json" >"$tmp/manifest.json"
 
 (cd "$tmp" && sha256sum -- "${files[@]}" manifest.json >SHA256SUMS)
 

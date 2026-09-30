@@ -36,6 +36,18 @@ EOF
 chmod +x "$tmp/bin/pmtiles"
 export PATH="$tmp/bin:$PATH" FAKE_HEADER="$tmp/header.json" FAKE_METADATA="$tmp/metadata.json"
 export BUILD_DIR="$tmp/build" REGION_NAME=prueba REGION_BBOX=-76.30,4.30,-76.00,4.55 REGION_MAXZOOM=16 PMTILES_MAX_MB=50
+export REGION_CENTER=-76.149,4.4105 ROUTING_MAX_KB=500
+
+# Grafo de rutas de la red de prueba (tests/fixtures/routing), sin la calle
+# aislada: conectado desde el centro. make_graph <opl> lo arma en BUILD_DIR.
+make_graph() {
+  mkdir -p "$BUILD_DIR/routing"
+  jq -n '{region: "prueba", osm_date: "20260928", source: "file:///colombia-260928.osm.pbf",
+    source_md5: "0123456789abcdef0123456789abcdef", bbox: [-76.3, 4.3, -76, 4.55]}' >"$BUILD_DIR/routing/source.json"
+  node scripts/routing/build.ts --opl "$1" --source "$BUILD_DIR/routing/source.json" \
+    --out "$BUILD_DIR/routing/prueba-rutas.json" >/dev/null
+}
+grep -v '^w[79] ' tests/fixtures/routing/red.opl >"$tmp/red-conectada.opl"
 
 # Estilo válido que pide dos capas del extracto.
 valid_style='{"version": 8, "sources": {"p": {"type": "vector", "url": "pmtiles://x"}},
@@ -54,6 +66,7 @@ reset() {
   jq -n --arg sha "$(sha256sum "$BUILD_DIR/prueba.pmtiles" | cut -d' ' -f1)" '{source_maxzoom: 15, sha256: $sha}' >"$BUILD_DIR/build.json"
   echo '{"tile_type": "mvt", "maxzoom": 15, "bounds": [-76.3, 4.3, -76, 4.55]}' >"$FAKE_HEADER"
   jq -n --argjson ids "$layers" '{vector_layers: ($ids | map({id: .}))}' >"$FAKE_METADATA"
+  make_graph "$tmp/red-conectada.opl"
 }
 
 # Cambia un JSON con una expresión de jq.
@@ -148,6 +161,68 @@ for bad in mucho 08 010 9999999; do
   else
     fail "PMTILES_MAX_MB=$bad: $out"
   fi
+done
+
+# --- Rutas ---------------------------------------------------------------------
+
+reset
+out="$(scripts/verify.sh 2>&1)"
+[[ "$out" == *"rutas (foot): la red principal tiene 6 de 6 vértices"* && "$out" == *"rutas (car)"* ]] \
+  && pass "verifica el grafo de rutas con los dos perfiles" || fail "sin verificación de rutas: $out"
+
+reset
+rm "$BUILD_DIR/routing/prueba-rutas.json"
+expect_problem "falta el grafo de rutas" "make routing"
+
+reset
+make_graph tests/fixtures/routing/red.opl
+expect_problem "red partida: las calles aisladas quedan fuera de la red principal" "la red principal tiene 6 de 10 vértices"
+
+reset
+edit "$BUILD_DIR/routing/source.json" '.osm_date = "20260101"'
+expect_problem "grafo de otra fecha de OSM que source.json" "igual que source.json"
+
+reset
+edit "$BUILD_DIR/routing/prueba-rutas.json" '.region = "otra"'
+expect_problem "grafo de otra región" "región 'otra'"
+
+reset
+ROUTING_MAX_KB=0 expect_problem "grafo más grande que ROUTING_MAX_KB" "límite 0 KB"
+
+reset
+REGION_CENTER=-75.5,4.41 expect_problem "centro lejos de toda vía" "FAIL - rutas (foot): el centro de la región está cerca de la red principal"
+
+# Rutas conocidas de la región (tests/data/rutas-<región>.test.ts): se corren si existen.
+known="$tmp/conocidas"
+mkdir -p "$known"
+reset
+KNOWN_ROUTES_DIR="$known" expect_ok "sin rutas conocidas para la región, no se exigen"
+cat >"$known/rutas-prueba.test.ts" <<'EOF2'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { it } from "node:test";
+it("el grafo del BUILD_DIR de verify.sh", () => {
+  const g = JSON.parse(readFileSync(`${process.env.BUILD_DIR}/routing/prueba-rutas.json`, "utf8"));
+  assert.equal(g.region, process.env.ESPERADA ?? "prueba");
+});
+EOF2
+reset
+out="$(KNOWN_ROUTES_DIR="$known" scripts/verify.sh 2>&1)" && [[ "$out" == *"ok   - rutas conocidas de prueba"* ]] \
+  && pass "corre las rutas conocidas de la región con su BUILD_DIR" || fail "rutas conocidas: $out"
+reset
+KNOWN_ROUTES_DIR="$known" ESPERADA=otra expect_problem "una ruta conocida que falla detiene la verificación" "rutas conocidas de prueba: falló"
+
+reset
+edit "$BUILD_DIR/routing/prueba-rutas.json" '.bbox = [-76.3, 4.3, -76, 4.6]'
+expect_problem "grafo de otra caja" "igual a la de la región"
+
+reset
+edit "$BUILD_DIR/routing/source.json" '.source_md5 = "ffffffffffffffffffffffffffffffff"'
+expect_problem "grafo de otro archivo de OSM que source.json" "igual que source.json"
+
+for bad in 08 abc; do
+  reset
+  ROUTING_MAX_KB="$bad" expect_problem "ROUTING_MAX_KB '$bad'" "ROUTING_MAX_KB debe ser un entero"
 done
 
 # Reporta todos los problemas, no solo el primero.

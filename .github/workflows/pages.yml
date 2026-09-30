@@ -56,13 +56,24 @@ jobs:
         with:
           path: build/cache/assets
           key: assets-${{ hashFiles('config/assets.lock') }}
+      # El extracto de Colombia de Geofabrik pesa ~330 MB: se restaura el último
+      # que guardó la CI de main. Con ROUTING_PREFER_CACHE=1, routing-source.sh lo
+      # usa mientras Geofabrik lo siga listando (y si Geofabrik no responde); si
+      # no, baja el más reciente. Siempre lo verifica con su MD5.
+      - name: Caché de OSM
+        id: osm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: build/cache/osm
+          key: osm-restaurar
+          restore-keys: osm-
       # Los estilos apuntan a la URL de Pages (https://<usuario>.github.io/<repo>).
       - name: make all
         env:
           STYLE_BASE_URL: ${{ steps.pages.outputs.base_url }}
         run: |
           test -n "$STYLE_BASE_URL"
-          docker compose run --rm tools make all \
+          docker compose run --rm -e ROUTING_PREFER_CACHE=1 tools make all \
             STYLE_BASE_URL="$STYLE_BASE_URL" STYLE_VERSION="pages-${GITHUB_SHA::7}"
       # Lo que se publica pasa por la misma verificación que en CI.
       - name: make verify
