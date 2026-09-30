@@ -140,3 +140,52 @@ Diario de avance por bloques (máximo 3 issues por bloque).
 - actionlint 1.7.12 trae metadatos viejos de `create-github-app-token@v3` y marca `client-id` como inválido. Es un falso positivo: v3 lo define y marca `app-id` como obsoleto.
 
 **Sigue:** publicar 0.1.1 fusionando el PR de release #38 (sus workflows pueden necesitar *Approve and run*). Después, v0.2.0 · Rutas (#29) o la app veni-roldanillo.
+
+## 2026-09-30 · Bloque 6: rutas y posición (v0.2.0)
+
+**Issues cerrados:** #29 grafo de calles y router para el navegador (PR #53), #54 posición del usuario y ruta en la demo (PR #57). Se publicaron **v0.1.1** y **v0.2.0**; la v0.2.0 trae `roldanillo-rutas.json` (OSM del 2026-09-29, ~215 KB con gzip).
+
+**Qué quedó**
+
+- `make routing`:
+  - toma el extracto de Colombia de Geofabrik (verificado con MD5 y en caché);
+  - osmium, compilado en la imagen, recorta las vías de la región;
+  - `build.ts` arma el grafo `veni-rutas` v1, con perfiles a pie y en carro, sentidos únicos y las reglas de acceso.
+- `scripts/routing/router.ts`:
+  - A* con el tiempo como costo;
+  - ajuste solo a la red principal de cada perfil (mayor componente fuertemente conexa);
+  - sin APIs de Node, así que la demo lo usa tal cual (`vendor/rutas/`, generado sin compilador).
+- `make verify` revisa el grafo:
+  - formato, caja y procedencia;
+  - tamaño con gzip;
+  - al menos el 90 % de la red conectada;
+  - rutas conocidas de Roldanillo (Alcaldía → Museo Rayo, un sentido único real).
+- Al volver a adjuntar una release se reutiliza el grafo publicado, verificado con su SHA-256.
+- La demo:
+  - «¿Dónde estoy?» muestra la posición;
+  - al tocar el mapa dibuja la ruta a pie o en carro, con distancia y tiempo;
+  - el grafo se baja recién al pedir la primera ruta;
+  - la posición no queda en la URL.
+
+**Prueba de funcionamiento** (Chromium con la geolocalización simulada, 23 casos, 69/69 en tres repeticiones):
+- Alcaldía → Museo Rayo: 260 m · 4 min a pie.
+- Sentido único real: 172 m a pie; en carro rodea (570 m).
+- Montaña: "sin ruta". Bogotá: "fuera de Roldanillo".
+- Apagar la ubicación borra la posición.
+- La ruta se conserva al cambiar de tema.
+
+**Decisiones**
+
+- JSON de enteros con codificación delta en vez de un binario propio o de formatos de servidor (OSRM, GraphHopper).
+- `ROUTING_PREFER_CACHE=1` en CI, Pages y la actualización mensual, para no bajar 330 MB por corrida. La release arma con el OSM más reciente. Aprobar el grafo en el PR mensual queda en #55.
+
+**Aprendizajes**
+
+- Las revisiones encontraron fallos reales antes de publicar:
+  - la posición exacta quedaba en la URL;
+  - un re-adjunto podía cambiar los datos de una versión;
+  - las glorietas con una sola entrada desaparecían del grafo;
+  - los tiempos agotados del GPS borraban la ruta.
+- Una prueba que dice "la ruta se dibuja" tiene que mirar la geometría, no solo que exista la capa.
+
+**Sigue:** #55 (aprobar el grafo en la actualización mensual) y la etapa 2, la app veni-roldanillo.
