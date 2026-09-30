@@ -63,10 +63,12 @@ describe("lectura de OPL", () => {
     assert.deepEqual(ways[0]!.nodes[1], { id: 10, lon: -76.1495, lat: 4.4101 });
   });
 
-  it("un nodo sin coordenadas corta la vía en dos tramos", () => {
-    const cut = parseOpl("w1 v1 Thighway=residential Nn1x-76.15y4.41,n2x-76.149y4.41,n3,n4x-76.147y4.41,n5x-76.146y4.41\n");
-    const g = buildGraph(cut, meta);
-    assert.equal(g.edges.length / EDGE_STRIDE, 2);
+  it("un nodo sin coordenadas es un error: osmium tuvo que dejar la ubicación de cada nodo", () => {
+    // Así lo escribe osmium add-locations-to-ways con --ignore-missing-nodes.
+    assert.throws(
+      () => parseOpl("w7 v1 Thighway=residential Nn1x-76.15y4.41,n3xy,n4x-76.147y4.41\n"),
+      /la vía w7 tiene el nodo n3 sin coordenadas/,
+    );
   });
 });
 
@@ -99,6 +101,21 @@ describe("reglas de acceso", () => {
     assert.equal(flags("highway=service,motor_vehicle=no") & (CAR_FORWARD | CAR_BACKWARD), 0);
     assert.equal(flags("highway=service,access=no,motorcar=destination") & CAR_FORWARD, CAR_FORWARD);
     assert.equal(flags("highway=path,foot=no"), 0);
+  });
+
+  it("sentidos únicos: oneway=reverse, oneway:foot y los implícitos", () => {
+    assert.equal(flags("highway=residential,oneway=reverse") & (CAR_FORWARD | CAR_BACKWARD), CAR_BACKWARD);
+    assert.equal(flags("highway=footway,oneway:foot=yes"), FOOT_FORWARD);
+    assert.equal(flags("highway=residential,oneway:foot=-1") & (FOOT_FORWARD | FOOT_BACKWARD), FOOT_BACKWARD);
+    assert.equal(flags("highway=motorway_link"), CAR_FORWARD);
+    assert.equal(flags("highway=tertiary,junction=circular") & (CAR_FORWARD | CAR_BACKWARD), CAR_FORWARD);
+  });
+
+  it("la etiqueta de acceso más específica manda sobre la general", () => {
+    assert.equal(flags("highway=service,vehicle=no,motorcar=yes") & CAR_FORWARD, CAR_FORWARD);
+    assert.equal(flags("highway=service,access=yes,motor_vehicle=no") & CAR_FORWARD, 0);
+    assert.equal(flags("highway=primary,foot=use_sidepath") & (FOOT_FORWARD | FOOT_BACKWARD), 0);
+    assert.equal(flags("highway=track,access=agricultural,foot=yes"), FOOT_FORWARD | FOOT_BACKWARD);
   });
 
   it("lo que no es una vía transitable no entra", () => {
@@ -212,6 +229,19 @@ describe("rutas", () => {
     const r = new Router(g);
     assert.deepEqual(r.network("car"), { main: 6, total: 11 });
     assert.deepEqual(r.route([-76.1471, 4.4095], A, "car")?.coordinates[0], C);
+  });
+
+  it("una vía cerrada con una sola conexión (glorieta con una entrada) sigue en el grafo", () => {
+    // Glorieta G1 → G2 → G3 → G1 conectada a C por una sola calle.
+    const glorieta =
+      "w30 v1 Thighway=tertiary,junction=roundabout Nn60x-76.1470y4.4100,n61x-76.1465y4.4103,n62x-76.1465y4.4097,n60x-76.1470y4.4100\n" +
+      "w31 v1 Thighway=tertiary Nn3x-76.148y4.41,n60x-76.1470y4.4100\n";
+    const r = new Router(buildGraph(parseOpl(opl + glorieta), meta));
+    // G2, el nodo del medio de la glorieta, es vértice: se puede llegar a él.
+    const ruta = r.route(A, [-76.1465, 4.4103], "car");
+    assert.ok(ruta, "sin ruta a la glorieta");
+    assert.deepEqual(ruta.coordinates.at(-1), [-76.1465, 4.4103]);
+    assert.equal(ruta.snap.to, 0);
   });
 
   it("el mismo punto: ruta de largo cero", () => {

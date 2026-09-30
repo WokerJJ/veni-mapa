@@ -50,11 +50,9 @@ export function parseOpl(opl: string): Way[] {
     const nodes: Way["nodes"] = [];
     for (const ref of nodeField ? nodeField.split(",") : []) {
       const m = /^n(\d+)x(-?[\d.]+)y(-?[\d.]+)$/.exec(ref);
-      // Sin coordenadas: el nodo quedó fuera del recorte; la vía se corta ahí.
-      if (!m) {
-        nodes.push({ id: Number(ref.slice(1).split("x")[0]), lon: NaN, lat: NaN });
-        continue;
-      }
+      // routing-source.sh recorta con complete_ways: toda vía trae sus nodos, y
+      // osmium falla si falta alguno. Un nodo sin coordenadas es un OPL roto.
+      if (!m) throw new Error(`la vía w${id} tiene el nodo ${ref.split("x")[0]} sin coordenadas`);
       nodes.push({ id: Number(m[1]), lon: Number(m[2]), lat: Number(m[3]) });
     }
     ways.push({ id, tags, nodes });
@@ -77,11 +75,16 @@ export function buildGraph(ways: Way[], meta: Meta): RoutingGraph {
     .map((way) => ({ way, flags: accessFlags(way.tags) }))
     .filter(({ way, flags }) => flags !== 0 && way.nodes.length >= 2);
 
-  // Un nodo es vértice si lo usan dos vías (o dos veces la misma) o si es un extremo.
+  // Un nodo es vértice si lo usan dos vías (o dos veces la misma) o si es un
+  // extremo. En una vía cerrada (glorieta) también el del medio: si no, con una
+  // sola conexión quedaría una arista de un vértice a sí mismo, que se descarta,
+  // y la vía desaparecería del grafo.
   const uses = new Map<number, number>();
   for (const { way } of routable) {
+    const closed = way.nodes.length >= 3 && way.nodes[0]!.id === way.nodes.at(-1)!.id;
+    const middle = Math.floor((way.nodes.length - 1) / 2);
     way.nodes.forEach((node, i) => {
-      const extra = i === 0 || i === way.nodes.length - 1 ? 2 : 1;
+      const extra = i === 0 || i === way.nodes.length - 1 || (closed && i === middle) ? 2 : 1;
       uses.set(node.id, (uses.get(node.id) ?? 0) + extra);
     });
   }
@@ -110,18 +113,8 @@ export function buildGraph(ways: Way[], meta: Meta): RoutingGraph {
 
   for (const { way, flags } of routable) {
     const cls = classIndex(way.tags.get("highway")!);
-    // Tramos con coordenadas: un nodo sin ellas corta la vía en dos.
-    let segment: Way["nodes"] = [];
-    const segments: Way["nodes"][] = [];
-    for (const node of way.nodes) {
-      if (Number.isNaN(node.lon)) {
-        if (segment.length >= 2) segments.push(segment);
-        segment = [];
-      } else segment.push(node);
-    }
-    if (segment.length >= 2) segments.push(segment);
-
-    for (const part of segments) {
+    {
+      const part = way.nodes;
       let start = 0;
       for (let i = 1; i < part.length; i++) {
         const node = part[i]!;
