@@ -147,30 +147,40 @@ const map = new maplibregl.Map({
 
 `private`, `no`, `agricultural` y `forestry` cierran el paso; `destination`, `customers` y `delivery` lo permiten.
 
-**Formato `veni-rutas` v1.** JSON de enteros con codificación delta (grados × 10⁶): `nodes` (vértices), `edges` (desde, hasta, largo en decímetros, banderas de perfil y sentido, tipo de vía), `geometry` y `geometry_counts` (puntos intermedios de cada arista). Pesa ~567 KB, ~215 KB con gzip (Pages y Cloudflare lo comprimen solos); `make verify` exige que no pase de `ROUTING_MAX_KB` (500) y que desde el centro de la región se llegue a casi toda la red. Se eligió JSON sobre formatos como los de OSRM o GraphHopper porque esos asumen un servidor, y sobre un binario propio porque el navegador lo decodifica de forma nativa y se puede inspeccionar a mano.
+**Formato `veni-rutas` v1.** JSON de enteros con codificación delta (grados × 10⁶): `nodes` (vértices), `edges` (desde, hasta, largo en decímetros, banderas de perfil y sentido, tipo de vía), `geometry` y `geometry_counts` (puntos intermedios de cada arista). Pesa ~567 KB, ~215 KB con gzip (Pages y Cloudflare lo comprimen solos); `make verify` exige que no pase de `ROUTING_MAX_KB` (500), que la caja y el origen coincidan con `source.json`, que al menos el 90 % de la red esté conectada (la mayor componente fuertemente conexa de cada perfil) y corre las rutas conocidas de [`tests/data/rutas-roldanillo.test.ts`](tests/data/rutas-roldanillo.test.ts). Se eligió JSON sobre formatos como los de OSRM o GraphHopper porque esos asumen un servidor, y sobre un binario propio porque el navegador lo decodifica de forma nativa y se puede inspeccionar a mano.
 
-**En la app** (`VITE_MAP_ROUTES_URL` apunta a `roldanillo-rutas.json` de la misma publicación que los estilos). El router carga el grafo en ~40 ms y calcula una ruta en unos pocos ms (A*, la más rápida del grafo):
+**En la app** (`VITE_MAP_ROUTES_URL` apunta a `roldanillo-rutas.json` de la misma publicación que los estilos). La app copia `scripts/routing/router.ts` y `graph.ts` del tag de la versión que usa (el formato lleva versión y el router rechaza otra). `router.ts` importa `./graph.ts` con extensión, así que el `tsconfig` de la app necesita `"moduleResolution": "bundler"` y `"allowImportingTsExtensions": true` (Vite lo resuelve solo). El router carga el grafo en ~40 ms y calcula una ruta en unos pocos ms (A*, la más rápida del grafo):
 
 ```ts
 import type { GeoJSONSource, Map } from "maplibre-gl";
-// scripts/routing/router.ts y graph.ts, copiados en la app desde la release.
+// scripts/routing/router.ts y graph.ts del tag vX.Y.Z de veni-mapa, copiados en la app.
 import { Router, type LngLat, type Route } from "@veni/rutas";
 
 declare const map: Map; // el mapa de "Usar el mapa en la app"
 
 // El grafo (~215 KB con gzip) se descarga la primera vez que se pide una ruta,
-// no al abrir el mapa.
+// no al abrir el mapa. Si la descarga falla (sin señal, portal cautivo), se
+// olvida la promesa para reintentar en la próxima ruta.
 let router: Promise<Router> | undefined;
 function loadRouter(): Promise<Router> {
-  router ??= fetch(import.meta.env.VITE_MAP_ROUTES_URL).then(async (res) => new Router(await res.json()));
+  router ??= fetch(import.meta.env.VITE_MAP_ROUTES_URL)
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`rutas: HTTP ${res.status}`);
+      return new Router(await res.json());
+    })
+    .catch((error: unknown) => {
+      router = undefined;
+      throw error;
+    });
   return router;
 }
 
 /** Dibuja la ruta y la devuelve (distance en m, duration en s), o null si no hay. */
 export async function showRoute(from: LngLat, to: LngLat, profile: "foot" | "car"): Promise<Route | null> {
   const route = (await loadRouter()).route(from, to, profile);
-  // Sin ruta (lejos de una vía o sin conexión): ofrecer abrir Google Maps o Waze.
+  // Sin ruta (a más de 1 km de una vía): ofrecer abrir Google Maps o Waze.
   if (!route) return null;
+  // route.snap dice cuántos metros hay de cada punto a la red: se dibujan aparte.
   const data: GeoJSON.Feature = { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: route.coordinates } };
   const source = map.getSource<GeoJSONSource>("ruta");
   if (source) source.setData(data);
@@ -182,9 +192,9 @@ export async function showRoute(from: LngLat, to: LngLat, profile: "foot" | "car
 }
 ```
 
-`route.coordinates` es la línea para dibujar y `route.distance` y `route.duration` sirven para mostrar "1,9 km · 25 min". La ubicación del usuario la da el dispositivo (control de geolocalización de MapLibre) y nunca sale del teléfono.
+`route.coordinates` es la línea para dibujar, `route.distance` y `route.duration` sirven para mostrar "1,9 km · 25 min" y `route.snap` dice cuántos metros hay entre cada punto pedido y la red. La ubicación del usuario la da el dispositivo (control de geolocalización de MapLibre) y nunca sale del teléfono.
 
-**Límites.** No es navegación paso a paso: los puntos se ajustan al cruce más cercano (a menos de 1 km), no hay giros prohibidos, semáforos ni tráfico, y la duración es una estimación. Para navegar, la app ofrece abrir Google Maps o Waze por enlace. Geofabrik guarda los archivos fechados solo unos días (y el del 1 de enero de cada año), así que cada release usa el más reciente y deja su fecha en `manifest.json` (`routing.osm_date`).
+**Límites.** No es navegación paso a paso: los puntos se ajustan al cruce más cercano de la red principal (a menos de 1 km; así un punto junto a una calle aislada igual tiene ruta), no hay giros prohibidos, semáforos ni tráfico, y la duración es una estimación. Para navegar, la app ofrece abrir Google Maps o Waze por enlace. Geofabrik guarda los archivos fechados solo unos días (y el del 1 de enero de cada año), así que cada release nueva usa el más reciente y deja su procedencia en `manifest.json` (`routing.osm_date`, `source` y `source_md5`); al volver a adjuntar una release se reutiliza el grafo publicado, verificado con su SHA-256 ([`scripts/routing-published.sh`](scripts/routing-published.sh)), y nunca se rearma. En CI, Pages y la actualización mensual, `ROUTING_PREFER_CACHE=1` reusa el archivo en caché mientras Geofabrik lo siga listando (y si Geofabrik no responde).
 
 ## Estilos
 
@@ -346,9 +356,9 @@ Las builds diarias de Protomaps llegan hasta z15: el extracto se recorta a ese z
 
 | Qué | Cómo | Dónde corre |
 | --- | --- | --- |
-| Scripts del pipeline (región, extracción, fuente de las rutas, recursos, sitio, verificación, release, publicación en R2, parches de Node de la imagen) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
+| Scripts del pipeline (región, extracción, fuente de las rutas, grafo publicado, recursos, sitio, verificación, release, publicación en R2, parches de Node de la imagen) | `docker compose run --rm tools bash tests/<x>_test.sh` | Imagen de herramientas, sin red |
 | Generador de estilos, `build.ts`, servidor, conteo de tiles, reporte de actualización, grafo y router de rutas (reglas de acceso, sentidos únicos, A* igual a Dijkstra), ejemplos del README y licencias | `docker compose run --rm tools make check` | Imagen de herramientas |
-| Rutas conocidas en Roldanillo (Alcaldía → Museo Rayo, sentido único real) | `docker compose run --rm tools node --test tests/data/rutas-roldanillo.test.ts` (después de `make routing`) | Imagen de herramientas |
+| Rutas conocidas en Roldanillo (Alcaldía → Museo Rayo, sentido único real) | Dentro de `make verify`; sueltas: `docker compose run --rm tools node --test tests/data/rutas-roldanillo.test.ts` (después de `make routing`) | Imagen de herramientas |
 | Estilos y extracto reales | `docker compose run --rm tools make verify` | Imagen de herramientas |
 | Render de la demo en Chromium sin interfaz: se dibuja al abrir en los 4 estilos, sin errores, arranca en la región, cambia de tema sin mover la cámara, no sale de la región, móvil sin scroll y botones de 44 px | `npm ci`, `npx playwright install --only-shell chromium` y `npm run test:render` (después de `make all`) | Host: Playwright no corre en Alpine |
 

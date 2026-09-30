@@ -35,5 +35,8 @@ describe("README", () => {
 
   it("el grafo de rutas se descarga al pedir la primera ruta, no al abrir el mapa", () => {
     assert.match(examples.get("rutas-app.ts")!, /router \?\?= fetch\(import\.meta\.env\.VITE_MAP_ROUTES_URL\)/);
+    // Un 404 o un corte no deja las rutas rotas hasta recargar.
+    assert.match(examples.get("rutas-app.ts")!, /if \(!res\.ok\) throw/);
+    assert.match(examples.get("rutas-app.ts")!, /router = undefined;/);
   });
 });
