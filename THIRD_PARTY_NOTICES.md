@@ -6,8 +6,9 @@ Componentes de terceros que usa o redistribuye este repositorio. Cada uno conser
 
 | Componente | Uso | Licencia |
 | --- | --- | --- |
-| Datos de OpenStreetMap | Fuente del extracto PMTiles | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) · © colaboradores de OpenStreetMap |
+| Datos de OpenStreetMap | Fuente del extracto PMTiles y del grafo de rutas | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) · © colaboradores de OpenStreetMap |
 | Build diaria de Protomaps | Origen del extracto (`build.protomaps.com`) | Datos ODbL (derivados de OSM) |
+| Extracto de Colombia de Geofabrik | Origen del grafo de rutas (`download.geofabrik.de`, `.osm.pbf` fechado) | Datos ODbL (copia de OSM) |
 
 ## Recursos redistribuidos en las releases
 
@@ -30,6 +31,7 @@ Cada fontstack combina la fuente de marca con Noto Sans: según la OFL es una **
 | --- | --- | --- |
 | [go-pmtiles](https://github.com/protomaps/go-pmtiles) | Extracción y metadatos del PMTiles | BSD-3-Clause |
 | [font-maker](https://github.com/maplibre/font-maker) | Conversión de TTF a glyphs SDF | BSD-3-Clause |
+| [osmium-tool](https://github.com/osmcode/osmium-tool) (y libosmium) | Recorte de la región y de las vías para el grafo de rutas | GPL-3.0 (herramienta) y BSL-1.0 (libosmium); solo corre en la imagen, sus salidas son datos ODbL |
 | [@maplibre/maplibre-gl-style-spec](https://github.com/maplibre/maplibre-style-spec) | Tipos y validación de los estilos | ISC |
 | [TypeScript](https://github.com/microsoft/TypeScript) | Verificación de tipos del generador | Apache-2.0 |
 | [Playwright](https://github.com/microsoft/playwright) | Prueba de render de la demo en Chromium sin interfaz | Apache-2.0 |
