@@ -1,0 +1,28 @@
+import type { GeoJSONSource, Map } from "maplibre-gl";
+// scripts/routing/router.ts y graph.ts, copiados en la app desde la release.
+import { Router, type LngLat, type Route } from "@veni/rutas";
+
+declare const map: Map; // el mapa de "Usar el mapa en la app"
+
+// El grafo (~215 KB con gzip) se descarga la primera vez que se pide una ruta,
+// no al abrir el mapa.
+let router: Promise<Router> | undefined;
+function loadRouter(): Promise<Router> {
+  router ??= fetch(import.meta.env.VITE_MAP_ROUTES_URL).then(async (res) => new Router(await res.json()));
+  return router;
+}
+
+/** Dibuja la ruta y la devuelve (distance en m, duration en s), o null si no hay. */
+export async function showRoute(from: LngLat, to: LngLat, profile: "foot" | "car"): Promise<Route | null> {
+  const route = (await loadRouter()).route(from, to, profile);
+  // Sin ruta (lejos de una vía o sin conexión): ofrecer abrir Google Maps o Waze.
+  if (!route) return null;
+  const data: GeoJSON.Feature = { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: route.coordinates } };
+  const source = map.getSource<GeoJSONSource>("ruta");
+  if (source) source.setData(data);
+  else {
+    map.addSource("ruta", { type: "geojson", data });
+    map.addLayer({ id: "ruta", type: "line", source: "ruta", paint: { "line-color": "#F0525A", "line-width": 5 } });
+  }
+  return route;
+}

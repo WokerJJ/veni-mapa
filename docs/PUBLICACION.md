@@ -21,7 +21,7 @@ PMTiles no pide tiles sueltos: pide **rangos de bytes** de un solo archivo (`Ran
 
 - URL: <https://wokerjj.github.io/veni-mapa/>
 - Workflow: [`.github/workflows/pages.yml`](../.github/workflows/pages.yml). En cada push a `main` (y a mano) construye con `make all STYLE_BASE_URL=<url de Pages>`, sube `build/site` con `actions/upload-pages-artifact` y lo publica con `actions/deploy-pages`. En los PR solo construye, para probar el workflow antes de fusionar. El PMTiles no pasa por git.
-- La demo usa la build más reciente de Protomaps de cada despliegue; la versión fijada de cada release la publica `release.yml` (issue #8).
+- La demo usa la build más reciente de Protomaps y el extracto de OSM de Geofabrik más reciente para las rutas en cada despliegue; la versión fijada de cada release la publica `release.yml` (issue #8).
 - Configuración del repositorio: *Settings → Pages → Source: GitHub Actions*.
 
 **Rangos HTTP y CORS:** el último paso del workflow pide `bytes=0-15` del `.pmtiles` publicado (con reintentos, mientras el CDN propaga) y falla si la respuesta no es `206`, si falta `Content-Range: bytes 0-15/…` o si falta `Access-Control-Allow-Origin: *`.
@@ -62,7 +62,7 @@ Para producción el mapa se sirve desde Cloudflare R2 en `https://tiles.venirold
 
 | Prefijo | Contenido | `Cache-Control` |
 | --- | --- | --- |
-| `/vX.Y.Z/` | Lo que usan los estilos de esa versión: `roldanillo.pmtiles`, `veni-*.json`, `fonts/`, `sprites/`, `licenses/`, `manifest.json`, `SHA256SUMS` y `assets.tar.gz`. | `public, max-age=31536000, immutable`: una versión no cambia nunca. |
+| `/vX.Y.Z/` | Lo que usan los estilos de esa versión: `roldanillo.pmtiles`, `roldanillo-rutas.json`, `veni-*.json`, `fonts/`, `sprites/`, `licenses/`, `manifest.json`, `SHA256SUMS` y `assets.tar.gz`. | `public, max-age=31536000, immutable`: una versión no cambia nunca. |
 | `/latest/` | Lo mismo, de la release más nueva. Se sube después de la versión (nunca apunta a una a medio subir), nunca retrocede (re-adjuntar una versión vieja solo republica su `/vX.Y.Z/`) y después se borra de `latest/` lo que esa versión ya no trae. | `public, max-age=300` |
 
 Los estilos de una release apuntan a `<TILES_BASE_URL>/vX.Y.Z` (variable de repositorio `TILES_BASE_URL`, por defecto `https://tiles.veniroldanillo.co`), también los copiados en `/latest/`. La app lee `/latest/manifest.json` para saber qué versión hay y carga sus estilos. Tipos de contenido: `application/vnd.pmtiles`, `application/x-protobuf` (glyphs), `application/json`, `image/png`, `application/gzip` y `text/plain`.
