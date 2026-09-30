@@ -20,7 +20,7 @@ reset() {
   mkdir -p "$BUILD_DIR/style" "$BUILD_DIR/assets/fonts/Figtree Regular" "$BUILD_DIR/assets/sprites" "$BUILD_DIR/assets/licenses" "$BUILD_DIR/routing"
   printf 'tiles' >"$BUILD_DIR/prueba.pmtiles"
   echo '{"format":"veni-rutas","version":1}' >"$BUILD_DIR/routing/prueba-rutas.json"
-  jq -n '{region: "prueba", osm_date: "20260928", source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf"}' \
+  jq -n '{region: "prueba", osm_date: "20260928", source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf", source_md5: "0123456789abcdef0123456789abcdef"}' \
     >"$BUILD_DIR/routing/source.json"
   jq -n --arg sha "$(sha256sum "$BUILD_DIR/prueba.pmtiles" | cut -d' ' -f1)" \
     '{region: "prueba", protomaps_build: "20260929", bbox: [-76.3, 4.3, -76, 4.55],
@@ -72,7 +72,7 @@ jq -e --arg base "$base" '
   .version == "0.1.0" and .region == "prueba" and .protomaps_build == "20260929"
   and .bbox == [-76.3, 4.3, -76, 4.55] and .maxzoom == 15 and .style_base_url == $base
   and .pmtiles == "prueba.pmtiles" and (.styles | length) == 4 and (.styles | all(startswith("veni-")))
-  and .routing == {file: "prueba-rutas.json", osm_date: "20260928", source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf"}
+  and .routing == {file: "prueba-rutas.json", osm_date: "20260928", source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf", source_md5: "0123456789abcdef0123456789abcdef"}
   and .data_license == "ODbL-1.0" and .attribution == "© colaboradores de OpenStreetMap"
   and (.files | length) == 7' "$DIST_DIR/manifest.json" >/dev/null \
   && pass "manifest.json con versión, build, bbox, zoom, base y rutas" || fail "manifest.json: $(cat "$DIST_DIR/manifest.json")"

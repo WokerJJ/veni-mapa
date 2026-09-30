@@ -103,6 +103,12 @@ jobs:
       #   reproducible: misma build, mismo archivo.
       # - release sin manifest.json y build_date a mano (re-adjunto): esa build,
       #   sin SHA-256 esperado. Es la salida si Protomaps ya borró la aprobada.
+      #
+      # El grafo de rutas sigue la misma regla: en un re-adjunto con manifest.json
+      # se descarga el publicado y se verifica con su SHA-256 (Geofabrik borra los
+      # archivos fechados a los pocos días: reconstruirlo daría otros datos). Una
+      # versión publicada antes de las rutas sigue sin ellas. En una release nueva
+      # se arma con el OSM más reciente y su fecha queda en el manifest.
       - name: Build de Protomaps
         env:
           GH_TOKEN: ${{ github.token }}
@@ -119,6 +125,17 @@ jobs:
             build="$(jq -r '.protomaps_build' "$manifest")"
             sha="$(jq -r '.pmtiles as $f | .files[] | select(.name == $f) | .sha256' "$manifest")"
             source="manifest.json publicado en $TAG"
+            # El grafo publicado, verificado con su SHA-256 (scripts/routing-published.sh).
+            # Una versión anterior a las rutas no lo tiene (ni el script en su tag).
+            if ! jq -e '.routing.file' "$manifest" >/dev/null; then
+              echo "ROUTING_MODE=sin-rutas" >>"$GITHUB_ENV"
+              echo "::notice::$TAG se publicó sin grafo de rutas: el re-adjunto no lo agrega"
+            else
+              gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*-rutas.json' --dir "$RUNNER_TEMP/publicado"
+              scripts/routing-published.sh "$manifest" "$RUNNER_TEMP/publicado"
+              echo "ROUTING_MODE=publicado" >>"$GITHUB_ENV"
+              echo "EXPECTED_ROUTING_SHA=$(sha256sum build/routing/*-rutas.json | cut -d' ' -f1)" >>"$GITHUB_ENV"
+            fi
           elif [[ -n "${INPUT_BUILD_DATE:-}" ]]; then
             build="$INPUT_BUILD_DATE"
             source="build_date pedida a mano"
@@ -166,6 +183,7 @@ jobs:
           key: osm-restaurar
           restore-keys: osm-
       - name: make routing
+        if: env.ROUTING_MODE == ''
         run: docker compose run --rm tools make routing
       - name: make extract assets style
         run: |
@@ -183,6 +201,10 @@ jobs:
           if [[ -n "$EXPECTED_PMTILES_SHA" ]]; then
             jq -e --arg sha "$EXPECTED_PMTILES_SHA" '.pmtiles as $f | .files[] | select(.name == $f) | .sha256 == $sha' dist/manifest.json \
               || { echo "::error::el extracto no da el SHA-256 esperado para la build $BUILD_DATE (¿cambió la región o go-pmtiles?)"; exit 1; }
+          fi
+          if [[ -n "${EXPECTED_ROUTING_SHA:-}" ]]; then
+            jq -e --arg sha "$EXPECTED_ROUTING_SHA" '.routing.file as $f | .files[] | select(.name == $f) | .sha256 == $sha' dist/manifest.json \
+              || { echo "::error::el grafo de rutas no es el publicado"; exit 1; }
           fi
           jq . dist/manifest.json
       - name: Adjuntar a la release

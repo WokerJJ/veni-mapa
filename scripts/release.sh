@@ -112,7 +112,7 @@ jq -n \
     maxzoom: ([$build[0].requested_maxzoom, $build[0].source_maxzoom] | min),
     style_base_url: $base,
     pmtiles: ($build[0].region + ".pmtiles"),
-    routing: {file: ($build[0].region + "-rutas.json"), osm_date: $routing[0].osm_date, source: $routing[0].source},
+    routing: {file: ($build[0].region + "-rutas.json"), osm_date: $routing[0].osm_date, source: $routing[0].source, source_md5: $routing[0].source_md5},
     styles: [$files[] | select(.name | startswith("veni-")) | .name],
     data_license: "ODbL-1.0",
     attribution: "© colaboradores de OpenStreetMap",
