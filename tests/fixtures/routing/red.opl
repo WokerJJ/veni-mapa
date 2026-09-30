@@ -7,3 +7,4 @@ w5 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=footway Nn2x-76.149y4.41,n5x-76.
 w6 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=residential,access=private Nn1x-76.15y4.41,n5x-76.149y4.411
 w7 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=residential Nn20x-76.14y4.42,n21x-76.139y4.42
 w8 v1 dV c0 t2026-01-01T00:00:00Z i0 u Tbuilding=yes Nn40x-76.151y4.41,n41x-76.151y4.411
+w9 v1 dV c0 t2026-01-01T00:00:00Z i0 u Thighway=service Nn30x-76.1503y4.4098,n31x-76.1506y4.4096

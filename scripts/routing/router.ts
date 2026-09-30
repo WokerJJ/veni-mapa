@@ -10,9 +10,14 @@
 // en línea recta a la velocidad máxima del perfil, que nunca sobreestima: la
 // ruta encontrada es la más rápida del grafo.
 //
-// Límites: los puntos se ajustan al vértice (cruce o extremo de vía) más
-// cercano, no a un punto sobre la calle; no hay giros prohibidos, semáforos ni
-// tráfico. Es para dibujar el camino, no para navegar paso a paso.
+// Los puntos se ajustan al vértice más cercano de la red principal del perfil
+// (su mayor componente fuertemente conexa: desde cualquiera de sus vértices se
+// llega a todos los demás). Así un punto junto a una calle aislada o al final de
+// un sentido único sin salida se ajusta a la red y siempre tiene ruta.
+//
+// Límites: los puntos se ajustan a un vértice (cruce o extremo de vía), no a un
+// punto sobre la calle; no hay giros prohibidos, semáforos ni tráfico. Es para
+// dibujar el camino, no para navegar paso a paso.
 import {
   CAR_BACKWARD,
   CAR_FORWARD,
@@ -38,6 +43,11 @@ export interface Route {
   duration: number;
   /** Camino para dibujar, del vértice de salida al de llegada. */
   coordinates: LngLat[];
+  /**
+   * Metros entre cada punto pedido y el vértice al que se ajustó: la app puede
+   * dibujar ese tramo aparte o avisar si es largo.
+   */
+  snap: { from: number; to: number };
 }
 
 /** Distancia máxima, en metros, entre un punto pedido y el vértice al que se ajusta. */
@@ -51,8 +61,10 @@ interface Adjacency {
   target: Int32Array;
   edge: Int32Array;
   reversed: Uint8Array;
-  /** Vértices con al menos un arco, por celda de la grilla. */
+  /** Vértices de la red principal, por celda de la grilla. */
   grid: Map<string, number[]>;
+  /** Tamaño de la red principal y cantidad de vértices con algún arco. */
+  network: { main: number; total: number };
 }
 
 export class Router {
@@ -104,11 +116,10 @@ export class Router {
       }
     };
     each((from) => degree[from + 1]!++);
-    // Un vértice sin arcos de salida pero con arcos de llegada también sirve de destino.
-    const reachable = new Uint8Array(count);
+    const hasArc = new Uint8Array(count);
     each((from, to) => {
-      reachable[from] = 1;
-      reachable[to] = 1;
+      hasArc[from] = 1;
+      hasArc[to] = 1;
     });
     for (let v = 0; v < count; v++) degree[v + 1]! += degree[v]!;
     const start = degree;
@@ -123,15 +134,25 @@ export class Router {
       edge[i] = e;
       reversed[i] = rev ? 1 : 0;
     });
+    const main = mainComponent(start, target, hasArc);
     const grid = new Map<string, number[]>();
+    let mainCount = 0;
+    let arcCount = 0;
     for (let v = 0; v < count; v++) {
-      if (!reachable[v]) continue;
+      arcCount += hasArc[v]!;
+      if (!main[v]) continue;
+      mainCount++;
       const key = cellKey(Math.floor(this.lon[v]! / CELL_DEG), Math.floor(this.lat[v]! / CELL_DEG));
       const cell = grid.get(key);
       if (cell) cell.push(v);
       else grid.set(key, [v]);
     }
-    return { start, target, edge, reversed, grid };
+    return { start, target, edge, reversed, grid, network: { main: mainCount, total: arcCount } };
+  }
+
+  /** Vértices de la red principal de un perfil y vértices con algún arco (para verificar el grafo). */
+  network(profile: Profile): { main: number; total: number } {
+    return { ...this.adjacency[profile].network };
   }
 
   /** Vértice más cercano a un punto para un perfil, o -1 si no hay ninguno a menos de MAX_SNAP_M. */
@@ -167,6 +188,10 @@ export class Router {
     const source = this.nearest(from, profile);
     const target = this.nearest(to, profile);
     if (source < 0 || target < 0) return null;
+    const snap = {
+      from: distanceM(from[0], from[1], this.lon[source]!, this.lat[source]!),
+      to: distanceM(to[0], to[1], this.lon[target]!, this.lat[target]!),
+    };
     const { start, target: arcTarget, edge: arcEdge, reversed } = this.adjacency[profile];
     const { edges } = this.graph;
     const maxSpeed = profile === "foot" ? FOOT_KMH / 3.6 : Math.max(...CLASSES.map((c) => c.carKmh ?? 0)) / 3.6;
@@ -219,7 +244,7 @@ export class Router {
       if (reversed[i]) inner.reverse();
       coordinates.push(...inner, [this.lon[arcTarget[i]!]!, this.lat[arcTarget[i]!]!]);
     }
-    return { distance, duration: time[target]!, coordinates };
+    return { distance, duration: time[target]!, coordinates, snap };
   }
 
   /** Puntos intermedios de una arista, en el sentido en que se guardó. */
@@ -236,6 +261,76 @@ export class Router {
     }
     return points;
   }
+}
+
+/**
+ * Mayor componente fuertemente conexa (Kosaraju, iterativo para no agotar la
+ * pila con redes grandes). Devuelve 1 para cada vértice que pertenece a ella.
+ */
+function mainComponent(start: Int32Array, target: Int32Array, hasArc: Uint8Array): Uint8Array {
+  const count = hasArc.length;
+  // 1. Orden de finalización de un DFS sobre el grafo.
+  const order: number[] = [];
+  const seen = new Uint8Array(count);
+  const stack: number[] = [];
+  const next = new Int32Array(count);
+  for (let root = 0; root < count; root++) {
+    if (seen[root] || !hasArc[root]) continue;
+    seen[root] = 1;
+    stack.push(root);
+    next[root] = start[root]!;
+    while (stack.length > 0) {
+      const v = stack[stack.length - 1]!;
+      if (next[v]! < start[v + 1]!) {
+        const w = target[next[v]!++]!;
+        if (!seen[w]) {
+          seen[w] = 1;
+          next[w] = start[w]!;
+          stack.push(w);
+        }
+      } else {
+        order.push(v);
+        stack.pop();
+      }
+    }
+  }
+  // 2. Grafo transpuesto (CSR).
+  const tStart = new Int32Array(count + 1);
+  for (let i = 0; i < target.length; i++) tStart[target[i]! + 1]!++;
+  for (let v = 0; v < count; v++) tStart[v + 1]! += tStart[v]!;
+  const tFill = tStart.slice(0, count);
+  const tTarget = new Int32Array(target.length);
+  for (let v = 0; v < count; v++) {
+    for (let i = start[v]!; i < start[v + 1]!; i++) tTarget[tFill[target[i]!]!++] = v;
+  }
+  // 3. DFS sobre el transpuesto en orden inverso de finalización: cada árbol es una componente.
+  const component = new Int32Array(count).fill(-1);
+  const sizes: number[] = [];
+  for (let k = order.length - 1; k >= 0; k--) {
+    const root = order[k]!;
+    if (component[root] !== -1) continue;
+    const id = sizes.length;
+    let size = 0;
+    component[root] = id;
+    stack.push(root);
+    while (stack.length > 0) {
+      const v = stack.pop()!;
+      size++;
+      for (let i = tStart[v]!; i < tStart[v + 1]!; i++) {
+        const w = tTarget[i]!;
+        if (component[w] === -1) {
+          component[w] = id;
+          stack.push(w);
+        }
+      }
+    }
+    sizes.push(size);
+  }
+  let largest = -1;
+  for (let id = 0; id < sizes.length; id++) if (largest < 0 || sizes[id]! > sizes[largest]!) largest = id;
+  const main = new Uint8Array(count);
+  for (let v = 0; v < count; v++) if (component[v] === largest && largest >= 0) main[v] = 1;
+  return main;
 }
 
 function cellKey(x: number, y: number): string {

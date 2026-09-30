@@ -6,7 +6,8 @@
 //   │     ┊     │        w3 y w4 doble sentido, w5 (┊) peatonal
 //   A ──→ B ──→ C        w1  sentido único de A a C, con dos nodos intermedios entre A y B
 //
-// w6 es una calle privada de A a E (nadie la usa) y w7, una calle aislada.
+// w6 es una calle privada de A a E (nadie la usa), w7 una calle aislada lejos y
+// w9 una calle aislada a ~30 m de A, más cerca de algunos puntos que la red.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -31,7 +32,14 @@ import { Router, type LngLat } from "../../scripts/routing/router.ts";
 const run = promisify(execFile);
 
 const opl = readFileSync("tests/fixtures/routing/red.opl", "utf8");
-const meta = { region: "prueba", osm_date: "20260928", bbox: [-76.2, 4.4, -76.1, 4.5] as [number, number, number, number], attribution: "© colaboradores de OpenStreetMap" };
+const meta = {
+  region: "prueba",
+  osm_date: "20260928",
+  source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf",
+  source_md5: "0123456789abcdef0123456789abcdef",
+  bbox: [-76.2, 4.4, -76.1, 4.5] as [number, number, number, number],
+  attribution: "© colaboradores de OpenStreetMap",
+};
 const graph = buildGraph(parseOpl(opl), meta);
 const router = new Router(graph);
 
@@ -50,7 +58,7 @@ const flags = (text: string): number => accessFlags(tags(text));
 describe("lectura de OPL", () => {
   it("solo vías, con etiquetas sin escapar y coordenadas", () => {
     const ways = parseOpl(opl);
-    assert.equal(ways.length, 8);
+    assert.equal(ways.length, 9);
     assert.equal(ways[0]!.tags.get("name"), "Calle 7");
     assert.deepEqual(ways[0]!.nodes[1], { id: 10, lon: -76.1495, lat: 4.4101 });
   });
@@ -103,9 +111,9 @@ describe("reglas de acceso", () => {
 
 describe("grafo", () => {
   it("vértices solo en cruces y extremos; los nodos intermedios quedan como geometría", () => {
-    // A B C D E F y los dos extremos de la calle aislada; sin n10 ni n11, sin w6 ni w8.
-    assert.equal(graph.nodes.length / 2, 8);
-    assert.equal(graph.edges.length / EDGE_STRIDE, 8);
+    // A B C D E F y los extremos de las dos calles aisladas; sin n10 ni n11, sin w6 ni w8.
+    assert.equal(graph.nodes.length / 2, 10);
+    assert.equal(graph.edges.length / EDGE_STRIDE, 9);
     assert.equal(graph.geometry_counts.reduce((a, b) => a + b, 0), 2);
     assert.equal(graph.geometry.length, 4);
   });
@@ -114,6 +122,8 @@ describe("grafo", () => {
     assert.equal(graph.format, "veni-rutas");
     assert.equal(graph.version, 1);
     assert.equal(graph.osm_date, "20260928");
+    assert.equal(graph.source, meta.source);
+    assert.equal(graph.source_md5, meta.source_md5);
     assert.equal(graph.attribution, "© colaboradores de OpenStreetMap");
     assert.equal(graph.license, "ODbL-1.0");
   });
@@ -174,6 +184,34 @@ describe("rutas", () => {
     assert.equal(router.route([-76.15, 4.39], C, "foot"), null);
     // A unos 50 m de A sí: se ajusta a A.
     assert.deepEqual(router.route([-76.1504, 4.4098], C, "car")?.coordinates[0], A);
+  });
+
+  it("un punto más cerca de una calle aislada que de la red se ajusta a la red", () => {
+    // A ~10 m de w9 (aislada) y a ~50 m de A.
+    const cerca: LngLat = [-76.1504, 4.4097];
+    for (const perfil of ["foot", "car"] as const) {
+      const ruta = router.route(cerca, C, perfil);
+      assert.ok(ruta, `${perfil}: sin ruta`);
+      assert.deepEqual(ruta.coordinates[0], A);
+      // Informa cuánto se movió cada punto al ajustarlo.
+      assert.ok(Math.abs(ruta.snap.from - distanceM(...cerca, ...A)) < 0.5, `${perfil}: snap ${ruta.snap.from}`);
+      assert.equal(ruta.snap.to, 0);
+    }
+  });
+
+  it("la red principal: cuántos vértices quedan fuera por perfil", () => {
+    // A pie: A-F más la peatonal (6) de 10 con arcos; en carro, los mismos 6.
+    assert.deepEqual(router.network("foot"), { main: 6, total: 10 });
+    assert.deepEqual(router.network("car"), { main: 6, total: 10 });
+  });
+
+  it("un sumidero de sentido único no es destino de ajuste", () => {
+    // Una calle de sentido único que sale de la red y no vuelve: su extremo es
+    // alcanzable pero no se puede salir de él, así que no entra a la red principal.
+    const g = buildGraph(parseOpl(opl + "w20 v1 Thighway=residential,oneway=yes Nn3x-76.148y4.41,n50x-76.147y4.4095\n"), meta);
+    const r = new Router(g);
+    assert.deepEqual(r.network("car"), { main: 6, total: 11 });
+    assert.deepEqual(r.route([-76.1471, 4.4095], A, "car")?.coordinates[0], C);
   });
 
   it("el mismo punto: ruta de largo cero", () => {
@@ -253,10 +291,10 @@ describe("CLI", () => {
 
   it("escribe el grafo desde el OPL y source.json", async () => {
     const source = join(dir, "source.json");
-    writeFileSync(source, JSON.stringify({ region: "prueba", osm_date: "20260928", bbox: meta.bbox }));
+    writeFileSync(source, JSON.stringify({ region: "prueba", osm_date: "20260928", source: meta.source, source_md5: meta.source_md5, bbox: meta.bbox }));
     const out = join(dir, "rutas.json");
     const { stdout } = await run(process.execPath, ["scripts/routing/build.ts", "--opl", "tests/fixtures/routing/red.opl", "--source", source, "--out", out]);
-    assert.match(stdout, /8 vértices, 8 aristas/);
+    assert.match(stdout, /10 vértices, 9 aristas/);
     assert.equal(readFileSync(out, "utf8"), JSON.stringify(graph));
   });
 
