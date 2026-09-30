@@ -141,8 +141,6 @@ jobs:
           restore-keys: osm-
       - name: make routing
         run: docker compose run --rm tools make routing
-      - name: Rutas conocidas en Roldanillo
-        run: docker compose run --rm tools node --test tests/data/rutas-roldanillo.test.ts
       # Se guarda con la fecha del extracto: una sola vez por archivo nuevo.
       - name: Fecha del extracto de OSM
         id: osm

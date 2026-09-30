@@ -1,6 +1,7 @@
 // Rutas conocidas sobre el grafo real de Roldanillo (make routing). No va con
-// las pruebas de `make check` porque necesita los datos: la CI la corre después
-// de make routing, y en local se corre con
+// las pruebas de `make check` porque necesita los datos: la corre `make verify`
+// (verify.sh corre tests/data/rutas-<región>.test.ts), así se cumple en la CI, en
+// Pages, en cada release y en la actualización mensual. Suelta:
 //
 //   docker compose run --rm tools node --test tests/data/rutas-roldanillo.test.ts
 //
@@ -13,7 +14,8 @@ import { describe, it } from "node:test";
 import { distanceM } from "../../scripts/routing/graph.ts";
 import { Router, type LngLat } from "../../scripts/routing/router.ts";
 
-const router = new Router(JSON.parse(readFileSync("build/routing/roldanillo-rutas.json", "utf8")));
+const buildDir = process.env.BUILD_DIR || "build";
+const router = new Router(JSON.parse(readFileSync(`${buildDir}/routing/roldanillo-rutas.json`, "utf8")));
 
 // Lugares tomados de OpenStreetMap.
 const ALCALDIA: LngLat = [-76.1543668, 4.4111559]; // node 13596229993

@@ -42,11 +42,12 @@ export REGION_CENTER=-76.149,4.4105 ROUTING_MAX_KB=500
 # aislada: conectado desde el centro. make_graph <opl> lo arma en BUILD_DIR.
 make_graph() {
   mkdir -p "$BUILD_DIR/routing"
-  jq -n '{region: "prueba", osm_date: "20260928", bbox: [-76.3, 4.3, -76, 4.55]}' >"$BUILD_DIR/routing/source.json"
+  jq -n '{region: "prueba", osm_date: "20260928", source: "file:///colombia-260928.osm.pbf",
+    source_md5: "0123456789abcdef0123456789abcdef", bbox: [-76.3, 4.3, -76, 4.55]}' >"$BUILD_DIR/routing/source.json"
   node scripts/routing/build.ts --opl "$1" --source "$BUILD_DIR/routing/source.json" \
     --out "$BUILD_DIR/routing/prueba-rutas.json" >/dev/null
 }
-grep -v '^w7 ' tests/fixtures/routing/red.opl >"$tmp/red-conectada.opl"
+grep -v '^w[79] ' tests/fixtures/routing/red.opl >"$tmp/red-conectada.opl"
 
 # Estilo válido que pide dos capas del extracto.
 valid_style='{"version": 8, "sources": {"p": {"type": "vector", "url": "pmtiles://x"}},
@@ -166,7 +167,7 @@ done
 
 reset
 out="$(scripts/verify.sh 2>&1)"
-[[ "$out" == *"rutas (foot): desde el centro se llega a"* && "$out" == *"rutas (car)"* ]] \
+[[ "$out" == *"rutas (foot): la red principal tiene 6 de 6 vértices"* && "$out" == *"rutas (car)"* ]] \
   && pass "verifica el grafo de rutas con los dos perfiles" || fail "sin verificación de rutas: $out"
 
 reset
@@ -175,7 +176,7 @@ expect_problem "falta el grafo de rutas" "make routing"
 
 reset
 make_graph tests/fixtures/routing/red.opl
-expect_problem "red partida: la calle aislada no se alcanza" "de 8 vértices de muestra"
+expect_problem "red partida: las calles aisladas quedan fuera de la red principal" "la red principal tiene 6 de 10 vértices"
 
 reset
 edit "$BUILD_DIR/routing/source.json" '.osm_date = "20260101"'
@@ -189,7 +190,35 @@ reset
 ROUTING_MAX_KB=0 expect_problem "grafo más grande que ROUTING_MAX_KB" "límite 0 KB"
 
 reset
-REGION_CENTER=-75.5,4.41 expect_problem "centro lejos de toda vía" "no está cerca de ninguna vía"
+REGION_CENTER=-75.5,4.41 expect_problem "centro lejos de toda vía" "FAIL - rutas (foot): el centro de la región está cerca de la red principal"
+
+# Rutas conocidas de la región (tests/data/rutas-<región>.test.ts): se corren si existen.
+known="$tmp/conocidas"
+mkdir -p "$known"
+reset
+KNOWN_ROUTES_DIR="$known" expect_ok "sin rutas conocidas para la región, no se exigen"
+cat >"$known/rutas-prueba.test.ts" <<'EOF2'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { it } from "node:test";
+it("el grafo del BUILD_DIR de verify.sh", () => {
+  const g = JSON.parse(readFileSync(`${process.env.BUILD_DIR}/routing/prueba-rutas.json`, "utf8"));
+  assert.equal(g.region, process.env.ESPERADA ?? "prueba");
+});
+EOF2
+reset
+out="$(KNOWN_ROUTES_DIR="$known" scripts/verify.sh 2>&1)" && [[ "$out" == *"ok   - rutas conocidas de prueba"* ]] \
+  && pass "corre las rutas conocidas de la región con su BUILD_DIR" || fail "rutas conocidas: $out"
+reset
+KNOWN_ROUTES_DIR="$known" ESPERADA=otra expect_problem "una ruta conocida que falla detiene la verificación" "rutas conocidas de prueba: falló"
+
+reset
+edit "$BUILD_DIR/routing/prueba-rutas.json" '.bbox = [-76.3, 4.3, -76, 4.6]'
+expect_problem "grafo de otra caja" "igual a la de la región"
+
+reset
+edit "$BUILD_DIR/routing/source.json" '.source_md5 = "ffffffffffffffffffffffffffffffff"'
+expect_problem "grafo de otro archivo de OSM que source.json" "igual que source.json"
 
 for bad in 08 abc; do
   reset

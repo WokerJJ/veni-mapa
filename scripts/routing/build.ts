@@ -65,6 +65,8 @@ export function parseOpl(opl: string): Way[] {
 interface Meta {
   region: string;
   osm_date: string;
+  source: string;
+  source_md5: string;
   bbox: [number, number, number, number];
   attribution: string;
 }
@@ -156,6 +158,8 @@ export function buildGraph(ways: Way[], meta: Meta): RoutingGraph {
     version: VERSION,
     region: meta.region,
     osm_date: meta.osm_date,
+    source: meta.source,
+    source_md5: meta.source_md5,
     bbox: meta.bbox,
     attribution: meta.attribution,
     license: "ODbL-1.0",
@@ -180,10 +184,12 @@ async function main(): Promise<void> {
   if (!values.opl || !values.source || !values.out) {
     throw new Error("uso: build.ts --opl <vías.opl> --source <source.json> --out <rutas.json>");
   }
-  const source = JSON.parse(await readFile(values.source, "utf8")) as { region: string; osm_date: string; bbox: [number, number, number, number] };
+  const source = JSON.parse(await readFile(values.source, "utf8")) as Omit<Meta, "attribution">;
   const graph = buildGraph(parseOpl(await readFile(values.opl, "utf8")), {
     region: source.region,
     osm_date: source.osm_date,
+    source: source.source,
+    source_md5: source.source_md5,
     bbox: source.bbox,
     attribution: "© colaboradores de OpenStreetMap",
   });

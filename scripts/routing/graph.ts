@@ -66,6 +66,9 @@ export interface RoutingGraph {
   region: string;
   /** Fecha del extracto de OpenStreetMap (AAAAMMDD). */
   osm_date: string;
+  /** Archivo de Geofabrik del que salió y su MD5 (procedencia). */
+  source: string;
+  source_md5: string;
   bbox: [number, number, number, number];
   attribution: string;
   license: "ODbL-1.0";

@@ -6,9 +6,10 @@
 #             igual a mín(REGION_MAXZOOM, zoom de la build), las capas que usan
 #             los estilos, y build.json que corresponde a este archivo
 #   Tamaño    el extracto no pasa de PMTILES_MAX_MB
-#   Rutas     el grafo (make routing): formato, región, misma fecha de OSM que
-#             source.json, ODbL, gzip de hasta ROUTING_MAX_KB y una red conectada
-#             desde el centro de la región (scripts/routing/verify.ts)
+#   Rutas     el grafo (make routing): formato, región y caja, mismo OSM que
+#             source.json, ODbL, gzip de hasta ROUTING_MAX_KB y al menos 90 % de la
+#             red conectada (scripts/routing/verify.ts); y, si existe,
+#             tests/data/rutas-<región>.test.ts con rutas conocidas de la región
 #
 # Lee REGION_NAME, REGION_BBOX, REGION_MAXZOOM y REGION_CENTER (config/region.yml,
 # vía make), BUILD_DIR, PMTILES_MAX_MB y ROUTING_MAX_KB. Reporta todos los
@@ -132,7 +133,18 @@ if [[ ! -f "$graph" || ! -f "$source" ]]; then
 else
   # verify.ts imprime sus propias líneas ok/FAIL; aquí solo se cuenta si falló.
   node scripts/routing/verify.ts --graph "$graph" --source "$source" --region "$REGION_NAME" \
-    --center="$REGION_CENTER" --max-kb "$max_kb" || problem "el grafo de rutas no pasó la verificación"
+    --bbox="$REGION_BBOX" --center="$REGION_CENTER" --max-kb "$max_kb" || problem "el grafo de rutas no pasó la verificación"
+  # Rutas conocidas de la región: detectan cambios de OSM que rompen calles
+  # reales (un sentido único invertido, una vía cortada) antes de publicar.
+  known="${KNOWN_ROUTES_DIR:-tests/data}/rutas-$REGION_NAME.test.ts"
+  if [[ -f "$known" ]]; then
+    if out="$(BUILD_DIR="$build_dir" node --test "$known" 2>&1)"; then
+      ok "rutas conocidas de $REGION_NAME ($known)"
+    else
+      echo "$out" | grep -E 'not ok|AssertionError|✖' >&2 || true
+      problem "rutas conocidas de $REGION_NAME: falló $known"
+    fi
+  fi
 fi
 
 if ((problems > 0)); then
