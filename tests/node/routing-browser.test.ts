@@ -40,7 +40,14 @@ describe("router para el navegador", () => {
     }
   });
 
+  it("reescribe las importaciones locales con comillas simples, dinámicas y de efecto", () => {
+    assert.match(toBrowser("import { x } from './graph.ts';\n", "p"), /from '\.\/graph\.js'/);
+    assert.match(toBrowser('const m = await import("./graph.ts");\n', "p"), /import\("\.\/graph\.js"\)/);
+    assert.match(toBrowser('import "./graph.ts";\n', "p"), /import "\.\/graph\.js"/);
+  });
+
   it("falla si queda una importación .ts que el navegador no puede cargar", () => {
     assert.throws(() => toBrowser('import { x } from "../otro/cosa.ts";\n', "prueba"), /quedó una importación \.ts/);
+    assert.throws(() => toBrowser("const m = await import('../otro.ts');\n", "prueba"), /quedó una importación \.ts/);
   });
 });

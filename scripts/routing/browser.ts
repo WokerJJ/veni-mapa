@@ -15,8 +15,9 @@ export const FILES = ["graph", "router"] as const;
 
 /** JavaScript de un módulo de scripts/routing, con sus importaciones locales en .js. */
 export function toBrowser(source: string, name: string): string {
-  const js = stripTypeScriptTypes(source).replace(/from "\.\/([a-z-]+)\.ts"/g, 'from "./$1.js"');
-  if (/from "[^"]+\.ts"/.test(js)) throw new Error(`${name}.ts: quedó una importación .ts`);
+  // Cualquier especificador "./x.ts" o './x.ts': from, import() e import de efecto.
+  const js = stripTypeScriptTypes(source).replace(/(["'])\.\/([a-z-]+)\.ts\1/g, "$1./$2.js$1");
+  if (/(["'])[^"'\n]*\.ts\1/.test(js)) throw new Error(`${name}.ts: quedó una importación .ts`);
   return `// Generado desde scripts/routing/${name}.ts por scripts/routing/browser.ts. No editar.\n${js}`;
 }
 

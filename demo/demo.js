@@ -28,6 +28,8 @@ const TEXTOS = {
       listo: "Tocá un punto del mapa para ver la ruta.",
       calculando: "Calculando la ruta…",
       "sin-ruta": "Sin ruta: ese punto está lejos de las calles de Roldanillo.",
+      "posicion-lejos": "Sin ruta: tu posición está lejos de las calles de Roldanillo.",
+      "sin-senal": "Sin señal de ubicación: esperando al GPS…",
       fuera: "Tu posición está fuera de Roldanillo: la ruta no se puede calcular.",
       error: "No se pudo cargar la red de calles. Tocá el mapa para reintentar.",
       "sin-permiso": "Sin permiso para ver tu posición: activalo en el navegador.",
@@ -53,6 +55,8 @@ const TEXTOS = {
       listo: "Tap a point on the map to see the route.",
       calculando: "Calculating the route…",
       "sin-ruta": "No route: that point is far from the streets of Roldanillo.",
+      "posicion-lejos": "No route: your location is far from the streets of Roldanillo.",
+      "sin-senal": "No location signal: waiting for GPS…",
       fuera: "Your location is outside Roldanillo: the route can't be calculated.",
       error: "The street network couldn't be loaded. Tap the map to retry.",
       "sin-permiso": "No permission to see your location: allow it in the browser.",
@@ -72,6 +76,7 @@ const TEXTOS_MAPLIBRE = {
     "AttributionControl.ToggleAttribution": "Mostrar u ocultar la atribución",
     "GeolocateControl.FindMyLocation": "¿Dónde estoy?",
     "GeolocateControl.LocationNotAvailable": "Tu posición no está disponible",
+    "Marker.Title": "Destino de la ruta",
     "ScaleControl.Meters": "m",
     "ScaleControl.Kilometers": "km",
   },
@@ -83,6 +88,7 @@ const TEXTOS_MAPLIBRE = {
     "AttributionControl.ToggleAttribution": "Toggle attribution",
     "GeolocateControl.FindMyLocation": "Where am I?",
     "GeolocateControl.LocationNotAvailable": "Location not available",
+    "Marker.Title": "Route destination",
     "ScaleControl.Meters": "m",
     "ScaleControl.Kilometers": "km",
   },
@@ -108,8 +114,11 @@ const ruta = {
   posicion: null, // [lon, lat] del último "¿Dónde estoy?"
   destino: null, // [lon, lat] del último punto tocado
   perfil: "foot",
-  estado: "sin-posicion", // sin-posicion | pedir-posicion | listo | calculando | ruta | sin-ruta | fuera | error | sin-permiso
+  // sin-posicion | pedir-posicion | listo | calculando | ruta | sin-ruta |
+  // posicion-lejos | fuera | error | sin-permiso | sin-senal
+  estado: "sin-posicion",
   ultima: null, // la ruta del router: distance (m), duration (s), coordinates, snap
+  calculadaDesde: null, // posición con la que se calculó la última ruta
 };
 
 const urlEstilo = () => new URL(`style/veni-${estado.tema}-${estado.idioma}.json`, location.href).href;
@@ -140,7 +149,10 @@ function aplicarTextosMapa(mapa) {
   etiquetar(".maplibregl-ctrl-zoom-out", t["NavigationControl.ZoomOut"]);
   etiquetar(".maplibregl-ctrl-compass", t["NavigationControl.ResetBearing"]);
   etiquetar(".maplibregl-ctrl-attrib-button", t["AttributionControl.ToggleAttribution"]);
-  etiquetar(".maplibregl-ctrl-geolocate", t["GeolocateControl.FindMyLocation"]);
+  // Con el permiso denegado MapLibre deshabilita el botón: se dice por qué.
+  const geolocalizar = mapa.getContainer().querySelector(".maplibregl-ctrl-geolocate");
+  if (geolocalizar) etiquetar(".maplibregl-ctrl-geolocate", t[geolocalizar.disabled ? "GeolocateControl.LocationNotAvailable" : "GeolocateControl.FindMyLocation"]);
+  mapa.getContainer().querySelector(".maplibregl-marker")?.setAttribute("aria-label", t["Marker.Title"]);
 }
 
 function guardarEnUrl() {
@@ -165,16 +177,24 @@ aplicarTextos();
 const estiloInicial = await (await fetch(urlEstilo())).json();
 const limites = estiloInicial.metadata?.["veni:bounds"];
 
+// Vista compartible en la URL (#vista=zoom/lat/lon). La escribe la demo y no
+// MapLibre (opción hash): con «¿Dónde estoy?» la cámara sigue al usuario y el
+// enlace delataría su posición, así que desde que se pide la ubicación y
+// mientras haya una, la vista no se guarda.
+const vistaInicial = (() => {
+  const m = /^#vista=(\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/.exec(location.hash);
+  return m ? { zoom: Number(m[1]), center: [Number(m[3]), Number(m[2])] } : null;
+})();
+
 const mapa = new maplibregl.Map({
   container: "mapa",
   style: estiloInicial,
-  center: estiloInicial.center,
-  zoom: estiloInicial.zoom,
+  center: vistaInicial?.center ?? estiloInicial.center,
+  zoom: vistaInicial?.zoom ?? estiloInicial.zoom,
   // El extracto guarda tiles enteros: en zooms bajos cubren medio continente.
   // Con maxBounds la cámara no sale de la región y no se ve el resto del mundo.
   maxBounds: Array.isArray(limites) && limites.length === 4 ? limites : undefined,
   attributionControl: { compact: false },
-  hash: "vista",
   locale: TEXTOS_MAPLIBRE[estado.idioma],
 });
 mapa.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -196,7 +216,7 @@ function cambiar(cambios) {
   // diff: false recarga el estilo completo. Los sprites claro y oscuro usan los
   // mismos nombres de íconos y el cambio "por diferencia" deja el atlas de
   // imágenes a medio actualizar en algunos navegadores.
-  mapa.setStyle(urlEstilo(), { diff: false });
+  cambiarEstilo();
 }
 
 for (const boton of document.querySelectorAll("[data-tema]")) {
@@ -213,17 +233,25 @@ sistemaOscuro.addEventListener("change", (evento) => {
   if (tema === estado.tema) return;
   estado.tema = tema;
   aplicarTextos();
-  mapa.setStyle(urlEstilo(), { diff: false });
+  cambiarEstilo();
 });
 
 // --- Posición y ruta -------------------------------------------------------------
 
 const COLOR_RUTA = "#F0525A"; // arrebol, solo en formas
+// Metros que tiene que moverse la posición para recalcular (el GPS tiembla).
+const MOVIMIENTO_MINIMO_M = 10;
 
 function formatoDistancia(metros) {
   if (metros < 1000) return `${Math.max(10, Math.round(metros / 10) * 10)} m`;
   const km = (metros / 1000).toFixed(1);
   return `${estado.idioma === "es" ? km.replace(".", ",") : km} km`;
+}
+
+function distanciaM([lon1, lat1], [lon2, lat2]) {
+  const rad = Math.PI / 180;
+  const a = Math.sin(((lat2 - lat1) * rad) / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
+  return 2 * 6_371_008.8 * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
 // Se llama también desde aplicarTextos(), antes de que exista el mapa.
@@ -233,17 +261,18 @@ function mostrarRuta() {
   for (const boton of document.querySelectorAll("[data-perfil]")) {
     boton.setAttribute("aria-pressed", String(boton.dataset.perfil === ruta.perfil));
   }
-  if (ruta.estado === "ruta" && ruta.ultima) {
-    const minutos = Math.max(1, Math.round(ruta.ultima.duration / 60));
-    panelEstado.textContent = `${formatoDistancia(ruta.ultima.distance)} · ${minutos} min ${t[ruta.perfil]}`;
-  } else {
-    panelEstado.textContent = t[ruta.estado];
-  }
+  const texto =
+    ruta.estado === "ruta" && ruta.ultima
+      ? `${formatoDistancia(ruta.ultima.distance)} · ${Math.max(1, Math.round(ruta.ultima.duration / 60))} min ${t[ruta.perfil]}`
+      : t[ruta.estado];
+  // role=status anuncia cada cambio: no se reescribe el mismo texto.
+  if (panelEstado.textContent !== texto) panelEstado.textContent = texto;
 }
 
 // El grafo (~215 KB con gzip) y el router se bajan al pedir la primera ruta, no
 // al abrir el mapa. Si falla, se olvida la promesa para reintentar.
 let router = null;
+let routerListo = null;
 function cargarRouter() {
   router ??= (async () => {
     const [{ Router }, build] = await Promise.all([
@@ -252,7 +281,8 @@ function cargarRouter() {
     ]);
     const res = await fetch(`${build.region}-rutas.json`);
     if (!res.ok) throw new Error(`rutas: HTTP ${res.status}`);
-    return new Router(await res.json());
+    routerListo = new Router(await res.json());
+    return routerListo;
   })().catch((error) => {
     router = null;
     throw error;
@@ -263,8 +293,19 @@ function cargarRouter() {
 const vacio = { type: "FeatureCollection", features: [] };
 
 // Capas de la ruta: se vuelven a agregar después de cada cambio de estilo
-// (setStyle con diff: false borra las fuentes y capas propias).
+// (setStyle con diff: false borra las fuentes y capas propias). Mientras el
+// estilo nuevo carga, addSource lanzaría "Style is not done loading": no se
+// toca nada y style.load dibuja el estado vigente. (isStyleLoaded() no sirve:
+// también espera los tiles, y en style.load todavía es falso.)
+let estiloListo = false;
+
+function cambiarEstilo() {
+  estiloListo = false;
+  mapa.setStyle(urlEstilo(), { diff: false });
+}
+
 function dibujarRuta() {
+  if (!estiloListo) return;
   if (!mapa.getSource("ruta")) {
     mapa.addSource("ruta", { type: "geojson", data: vacio });
     mapa.addSource("ruta-ajuste", { type: "geojson", data: vacio });
@@ -281,30 +322,69 @@ function dibujarRuta() {
       ? {
           type: "Feature",
           properties: {},
-          geometry: { type: "MultiLineString", coordinates: [[ruta.posicion, r.coordinates[0]], [r.coordinates.at(-1), ruta.destino]] },
+          geometry: { type: "MultiLineString", coordinates: [[r.desde, r.coordinates[0]], [r.coordinates.at(-1), r.hasta]] },
         }
       : vacio,
   );
 }
 
-const marcadorDestino = new maplibregl.Marker({ color: COLOR_RUTA });
+let marcadorDestino = null;
+function marcar(destino) {
+  marcadorDestino ??= new maplibregl.Marker({ color: COLOR_RUTA });
+  marcadorDestino.setLngLat(destino).addTo(mapa);
+  marcadorDestino.getElement().setAttribute("aria-label", TEXTOS_MAPLIBRE[estado.idioma]["Marker.Title"]);
+}
+
+// Cada cálculo lleva un número: si mientras se baja el grafo llega otra
+// posición, otro toque, otro perfil o la posición sale de la región, el
+// resultado viejo se descarta en vez de pisar el estado nuevo.
+let pedido = 0;
 
 async function calcularRuta() {
-  if (!ruta.posicion || !ruta.destino) return;
-  ruta.estado = "calculando";
-  mostrarRuta();
+  const id = ++pedido;
+  const { posicion, destino, perfil } = ruta;
+  if (!posicion || !destino) return;
+  // Con el router ya cargado el cálculo es inmediato: sin "Calculando…".
+  if (!routerListo) {
+    ruta.estado = "calculando";
+    mostrarRuta();
+  }
+  let calculada = null;
+  let estadoNuevo;
   try {
-    const calculada = (await cargarRouter()).route(ruta.posicion, ruta.destino, ruta.perfil);
-    ruta.ultima = calculada;
-    ruta.estado = calculada ? "ruta" : "sin-ruta";
+    const r = await cargarRouter();
+    calculada = r.route(posicion, destino, perfil);
+    if (calculada) {
+      calculada.desde = posicion;
+      calculada.hasta = destino;
+      estadoNuevo = "ruta";
+    } else {
+      // El router no dice cuál de los dos puntos quedó lejos de la red.
+      estadoNuevo = r.nearest(posicion, perfil) < 0 ? "posicion-lejos" : "sin-ruta";
+    }
   } catch (error) {
     console.warn(error);
-    ruta.ultima = null;
-    ruta.estado = "error";
+    estadoNuevo = "error";
   }
+  if (id !== pedido) return;
+  ruta.ultima = calculada;
+  ruta.estado = estadoNuevo;
+  ruta.calculadaDesde = posicion;
   mostrarRuta();
   dibujarRuta();
 }
+
+function olvidarPosicion(estadoNuevo) {
+  pedido++;
+  ruta.posicion = null;
+  ruta.ultima = null;
+  ruta.calculadaDesde = null;
+  ruta.estado = estadoNuevo;
+  mostrarRuta();
+  dibujarRuta();
+}
+
+let ubicando = false; // desde que se toca «¿Dónde estoy?» hasta apagarlo
 
 const ubicacion = new maplibregl.GeolocateControl({
   positionOptions: { enableHighAccuracy: true },
@@ -312,31 +392,51 @@ const ubicacion = new maplibregl.GeolocateControl({
   fitBoundsOptions: { maxZoom: 16 },
 });
 mapa.addControl(ubicacion, "top-right");
+
+ubicacion.on("trackuserlocationstart", () => {
+  ubicando = true;
+});
+// trackuserlocationend también llega al mover el mapa (el punto sigue, la
+// cámara no). Solo al apagar el botón MapLibre le quita todas las clases de estado.
+ubicacion.on("trackuserlocationend", () => {
+  const boton = mapa.getContainer().querySelector(".maplibregl-ctrl-geolocate");
+  const activo = [...(boton?.classList ?? [])].some((c) => /^maplibregl-ctrl-geolocate-(active|background|waiting)/.test(c));
+  if (activo) return;
+  ubicando = false;
+  olvidarPosicion("sin-posicion");
+});
 ubicacion.on("geolocate", (evento) => {
-  ruta.posicion = [evento.coords.longitude, evento.coords.latitude];
-  if (ruta.destino && ruta.estado !== "fuera") calcularRuta();
-  else {
+  const posicion = [evento.coords.longitude, evento.coords.latitude];
+  const anterior = ruta.calculadaDesde;
+  ruta.posicion = posicion;
+  if (!ruta.destino) {
     ruta.estado = "listo";
     mostrarRuta();
+    return;
   }
+  // Con destino: recalcular al volver a la región o si la posición se movió.
+  if (ruta.estado === "ruta" && anterior && distanciaM(anterior, posicion) < MOVIMIENTO_MINIMO_M) return;
+  calcularRuta();
 });
 // Fuera de maxBounds MapLibre no dibuja la posición: no hay ruta posible.
-ubicacion.on("outofmaxbounds", () => {
-  ruta.posicion = null;
-  ruta.ultima = null;
-  ruta.estado = "fuera";
-  mostrarRuta();
-  dibujarRuta();
-});
-ubicacion.on("error", () => {
-  ruta.estado = "sin-permiso";
-  mostrarRuta();
+ubicacion.on("outofmaxbounds", () => olvidarPosicion("fuera"));
+// Código 1: sin permiso. 2 y 3 (sin señal, tiempo agotado) son pasajeros y
+// llegan seguido con la posición quieta (watchPosition agota su tiempo entre
+// lecturas): con una posición ya conocida no cambian nada; sin ella, se avisa.
+ubicacion.on("error", (evento) => {
+  if (evento.code === 1) {
+    ubicando = false;
+    olvidarPosicion("sin-permiso");
+  } else if (!ruta.posicion) {
+    ruta.estado = "sin-senal";
+    mostrarRuta();
+  }
 });
 
 mapa.on("click", (evento) => {
   if (ruta.estado === "fuera") return;
   ruta.destino = [evento.lngLat.lng, evento.lngLat.lat];
-  marcadorDestino.setLngLat(ruta.destino).addTo(mapa);
+  marcar(ruta.destino);
   if (!ruta.posicion) {
     ruta.estado = "pedir-posicion";
     mostrarRuta();
@@ -354,7 +454,20 @@ for (const boton of document.querySelectorAll("[data-perfil]")) {
   });
 }
 
-mapa.on("style.load", dibujarRuta);
+function guardarVista() {
+  if (ubicando || ruta.posicion) return;
+  const centro = mapa.getCenter();
+  const url = new URL(location.href);
+  url.hash = `vista=${mapa.getZoom().toFixed(2)}/${centro.lat.toFixed(4)}/${centro.lng.toFixed(4)}`;
+  history.replaceState(null, "", url);
+}
+
+mapa.on("style.load", () => {
+  estiloListo = true;
+  dibujarRuta();
+});
+mapa.on("moveend", guardarVista);
+mapa.once("load", guardarVista);
 mostrarRuta();
 
 // Para las pruebas de render (issue #6) y para depurar desde la consola.
