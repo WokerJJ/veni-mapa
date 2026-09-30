@@ -84,7 +84,7 @@ La extracción no descarga el planeta: `pmtiles` pide por rangos HTTP solo los t
 
 MapLibre GL y PMTiles autohospedados (sin CDN), botones para tema claro u oscuro y etiquetas en español o inglés, con la interfaz traducida. Lo que elegís queda en la URL (`?tema=oscuro&idioma=en`) y la vista en el fragmento (`#vista=zoom/lat/lon`); sin tema elegido, la demo sigue la preferencia del sistema, también si cambia. Los controles de MapLibre también se traducen.
 
-**Posición y rutas.** «¿Dónde estoy?» muestra tu posición (se queda en el navegador) y al tocar un punto del mapa se dibuja la ruta desde ahí, a pie o en carro, con distancia y tiempo estimado. El router es el de [Rutas](#rutas), generado en JavaScript desde `scripts/routing/*.ts` al armar el sitio (`vendor/rutas/`); el grafo se baja recién al pedir la primera ruta. Es lo mismo que hará la app, probado de punta a punta en Chromium con la geolocalización simulada.
+**Posición y rutas.** «¿Dónde estoy?» muestra tu posición (se queda en el navegador: mientras está activa, la vista deja de guardarse en la URL para que un enlace compartido no la delate) y al tocar un punto del mapa se dibuja la ruta desde ahí, a pie o en carro, con distancia y tiempo estimado. El router es el de [Rutas](#rutas), generado en JavaScript desde `scripts/routing/router.ts` y `graph.ts` al armar el sitio (`vendor/rutas/`); el grafo se baja recién al pedir la primera ruta. Es lo mismo que hará la app, probado de punta a punta en Chromium con la geolocalización simulada.
 
 | A pie, de la Alcaldía al Museo Rayo | En carro, rodeando un sentido único |
 | --- | --- |

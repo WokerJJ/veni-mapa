@@ -25,15 +25,18 @@ declare global {
       getPaintProperty(layer: string, property: string): unknown;
       queryRenderedFeatures(): unknown[];
       zoomTo(zoom: number, options: { duration: number }): void;
-      jumpTo(options: { center: [number, number]; zoom?: number }): void;
+      // Devuelve el propio mapa: en page.evaluate no hay que retornarlo (Playwright
+      // lo serializaría entero).
+      jumpTo(options: { center: [number, number]; zoom?: number }): unknown;
       project(lngLat: [number, number]): { x: number; y: number };
       getLayer(id: string): unknown;
+      getSource(id: string): { getData(): Promise<{ type: string; features?: unknown[]; geometry?: { coordinates: unknown[] } }> } | undefined;
     };
     /** Estado de la ruta en la demo (posición, perfil y última ruta calculada). */
     veniRuta: {
       posicion: [number, number] | null;
       perfil: "foot" | "car";
-      estado: "sin-posicion" | "pedir-posicion" | "listo" | "calculando" | "ruta" | "sin-ruta" | "fuera" | "error" | "sin-permiso";
+      estado: "sin-posicion" | "pedir-posicion" | "listo" | "calculando" | "ruta" | "sin-ruta" | "posicion-lejos" | "fuera" | "error" | "sin-permiso" | "sin-senal";
       ultima: {
         distance: number;
         duration: number;
