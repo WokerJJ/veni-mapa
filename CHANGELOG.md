@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/WokerJJ/veni-mapa/compare/v0.1.1...v0.2.0) (2026-09-30)
+
+
+### Funcionalidades
+
+* **demo:** posición del usuario y ruta al tocar el mapa ([#57](https://github.com/WokerJJ/veni-mapa/issues/57)) ([d34fb34](https://github.com/WokerJJ/veni-mapa/commit/d34fb34bb7be9afaca34796ccf841edcaf2a43fb))
+* **rutas:** grafo de calles de Roldanillo y router para el navegador ([#53](https://github.com/WokerJJ/veni-mapa/issues/53)) ([f7092ff](https://github.com/WokerJJ/veni-mapa/commit/f7092ffe05002ba3c74f1b07eb45d72c42de9a87))
+
 ## [0.1.1](https://github.com/WokerJJ/veni-mapa/compare/v0.1.0...v0.1.1) (2026-09-29)
 
 
