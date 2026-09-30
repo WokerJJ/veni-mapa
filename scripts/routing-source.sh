@@ -5,17 +5,23 @@
 # compartidos ni oneway), así que se parte del extracto de Colombia de Geofabrik
 # (.osm.pbf, ~330 MB) y osmium recorta la región y se queda con las vías.
 #
-# Variables: REGION_NAME y REGION_BBOX (config/region.yml), BUILD_DIR y,
-# opcional, ROUTING_DATE=AAAAMMDD (por defecto, el archivo fechado más reciente).
+# Variables: REGION_NAME y REGION_BBOX (config/region.yml), BUILD_DIR y, opcionales:
+#   ROUTING_DATE=AAAAMMDD    ese archivo fechado (por defecto, el más reciente)
+#   ROUTING_PREFER_CACHE=1   CI, Pages y la actualización mensual: si el archivo en
+#                            caché todavía está en la lista de Geofabrik, se usa ese
+#                            en vez del más reciente (no bajar 330 MB cada día); y
+#                            si Geofabrik no responde, se usa la caché con su MD5
+#                            guardado y un aviso. La release no lo usa: arma con el
+#                            más reciente.
 # GEOFABRIK_BASE cambia el origen (acepta file:// para las pruebas sin red).
 #
 # Salidas en BUILD_DIR/routing:
 #   <región>-vias.opl   vías con highway=*, con las coordenadas de sus nodos (OPL)
 #   source.json         de dónde salió: archivo, fecha, MD5 y SHA-256 del recorte
 #
-# La descarga queda en BUILD_DIR/cache/osm y se verifica con el MD5 que publica
-# Geofabrik cada vez que se usa. Como en extract.sh, las salidas se preparan en
-# una carpeta temporal y se publican juntas al final.
+# La descarga queda en BUILD_DIR/cache/osm, junto con su MD5, y se verifica cada
+# vez que se usa. Como en extract.sh, las salidas se preparan en una carpeta
+# temporal y se publican juntas al final.
 set -euo pipefail
 
 : "${REGION_NAME:?falta REGION_NAME (usá make routing)}" "${REGION_BBOX:?falta REGION_BBOX}"
@@ -36,24 +42,52 @@ fetch() {
 
 [[ -z "$requested" || "$requested" =~ ^20[0-9]{6}$ ]] || fail "ROUTING_DATE debe ser AAAAMMDD (recibido: '$requested')"
 
-# Geofabrik nombra los archivos fechados como colombia-AAMMDD.osm.pbf y los
-# lista en su página: los últimos días y el 1 de enero de cada año.
-listing="$(fetch "$base/$country.html")" || fail "no se pudo leer la lista de $base/$country.html"
-dates="$(grep -oE "$country-[0-9]{6}\.osm\.pbf" <<<"$listing" | sed -E "s/^$country-([0-9]{6}).*/20\1/" | sort -u)" || true
-[[ -n "$dates" ]] || fail "$base/$country.html no lista archivos fechados"
-if [[ -n "$requested" ]]; then
-  grep -qx "$requested" <<<"$dates" || fail "Geofabrik no tiene el archivo del $requested (el más reciente es $(tail -n1 <<<"$dates"))"
-  date="$requested"
-else
-  date="$(tail -n1 <<<"$dates")"
-fi
-file="$country-${date:2}.osm.pbf"
-url="$base/$file"
-
 cache="$build_dir/cache/osm"
 mkdir -p "$cache"
-md5="$(fetch "$url.md5" | awk -v f="$file" '$2 == f {print $1}')" || fail "no se pudo leer $url.md5"
-[[ "$md5" =~ ^[0-9a-f]{32}$ ]] || fail "$url.md5 no trae el MD5 de $file"
+prefer_cache="${ROUTING_PREFER_CACHE:-}"
+
+# Archivo en caché (hay uno solo) y el MD5 que publicaba Geofabrik al bajarlo.
+cached_file=""
+for path in "$cache/$country"-[0-9][0-9][0-9][0-9][0-9][0-9].osm.pbf; do
+  if [[ -f "$path" ]]; then cached_file="${path##*/}"; fi
+done
+cached_date=""
+if [[ -n "$cached_file" ]]; then
+  cached_date="20$(sed -E "s/^$country-([0-9]{6}).*/\1/" <<<"$cached_file")"
+fi
+
+# Geofabrik nombra los archivos fechados como colombia-AAMMDD.osm.pbf y los
+# lista en su página: los últimos días y el 1 de enero de cada año.
+if ! listing="$(fetch "$base/$country.html")"; then
+  # Sin Geofabrik, la caché sirve si se prefiere y su MD5 guardado coincide.
+  if [[ "$prefer_cache" == 1 && -z "$requested" && -n "$cached_file" && -f "$cache/$cached_file.md5" ]] \
+    && [[ "$(md5sum "$cache/$cached_file" | cut -d' ' -f1)" == "$(cat "$cache/$cached_file.md5")" ]]; then
+    echo "::warning title=Rutas::Geofabrik no respondió: se usa $cached_file de la caché" >&2
+    date="$cached_date"
+    file="$cached_file"
+    url="$base/$file"
+    md5="$(cat "$cache/$file.md5")"
+  else
+    fail "no se pudo leer la lista de $base/$country.html"
+  fi
+fi
+
+if [[ -z "${file:-}" ]]; then
+  dates="$(grep -oE "$country-[0-9]{6}\.osm\.pbf" <<<"$listing" | sed -E "s/^$country-([0-9]{6}).*/20\1/" | sort -u)" || true
+  [[ -n "$dates" ]] || fail "$base/$country.html no lista archivos fechados"
+  if [[ -n "$requested" ]]; then
+    grep -qx "$requested" <<<"$dates" || fail "Geofabrik no tiene el archivo del $requested (el más reciente es $(tail -n1 <<<"$dates"))"
+    date="$requested"
+  elif [[ "$prefer_cache" == 1 && -n "$cached_date" ]] && grep -qx "$cached_date" <<<"$dates"; then
+    date="$cached_date"
+  else
+    date="$(tail -n1 <<<"$dates")"
+  fi
+  file="$country-${date:2}.osm.pbf"
+  url="$base/$file"
+  md5="$(fetch "$url.md5" | awk -v f="$file" '$2 == f {print $1}')" || fail "no se pudo leer $url.md5"
+  [[ "$md5" =~ ^[0-9a-f]{32}$ ]] || fail "$url.md5 no trae el MD5 de $file"
+fi
 
 if [[ -f "$cache/$file" ]] && [[ "$(md5sum "$cache/$file" | cut -d' ' -f1)" == "$md5" ]]; then
   echo "==> OSM: $file (en caché)"
@@ -63,8 +97,9 @@ else
   [[ "$(md5sum "$cache/$file.part" | cut -d' ' -f1)" == "$md5" ]] || { rm -f "$cache/$file.part"; fail "$file no coincide con su MD5"; }
   mv "$cache/$file.part" "$cache/$file"
   # Solo se guarda el último: cada uno pesa cientos de MB.
-  find "$cache" -maxdepth 1 -name "$country-*.osm.pbf" ! -name "$file" -delete
+  find "$cache" -maxdepth 1 -name "$country-*.osm.pbf*" ! -name "$file" -delete
 fi
+echo "$md5" >"$cache/$file.md5"
 
 mkdir -p "$build_dir/routing"
 staging="$(mktemp -d "$build_dir/routing/.source.XXXXXX")"

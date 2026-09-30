@@ -94,6 +94,38 @@ printf 'roto' >"$BUILD_DIR/cache/osm/colombia-260927.osm.pbf"
 out="$(ROUTING_DATE=20260927 run)"
 [[ "$out" == *"descargando colombia-260927.osm.pbf"* ]] && pass "una caché corrupta se descarga de nuevo" || fail "caché corrupta: $out"
 
+[[ "$(cat "$BUILD_DIR/cache/osm/colombia-260927.osm.pbf.md5")" == "$(cut -d' ' -f1 "$geofabrik/colombia-260927.osm.pbf.md5")" ]] \
+  && pass "la caché guarda el MD5 junto al archivo" || fail "sin MD5 en caché: $(ls "$BUILD_DIR/cache/osm")"
+
+# --- ROUTING_PREFER_CACHE (CI, Pages, actualización mensual) --------------------
+
+# En caché está el del 27, que Geofabrik todavía lista: se usa ese y no se baja el 28.
+out="$(ROUTING_PREFER_CACHE=1 run)"
+[[ "$out" == *"colombia-260927.osm.pbf (en caché)"* ]] && jq -e '.osm_date == "20260927"' "$source_json" >/dev/null \
+  && pass "con caché todavía listada, no descarga el más reciente" || fail "prefer cache: $out"
+
+# Sin preferir la caché, el más reciente.
+out="$(run)"
+[[ "$out" == *"descargando colombia-260928.osm.pbf"* ]] && pass "sin preferir la caché, baja el más reciente" || fail "sin prefer: $out"
+
+# Geofabrik ya no lista el de la caché: se baja el más reciente aunque se prefiera la caché.
+ROUTING_DATE=20260927 run >/dev/null
+publish 260101 260928
+out="$(ROUTING_PREFER_CACHE=1 run)"
+[[ "$out" == *"descargando colombia-260928.osm.pbf"* ]] && pass "caché que ya no está en la lista: baja el más reciente" || fail "caché vieja: $out"
+
+# Geofabrik no responde: con la caché preferida, se usa con un aviso; sin ella, falla.
+mv "$geofabrik/colombia.html" "$tmp/colombia.html"
+out="$(ROUTING_PREFER_CACHE=1 run)"
+[[ "$out" == *"::warning title=Rutas::Geofabrik no respondió: se usa colombia-260928.osm.pbf de la caché"* && "$out" == *"(en caché)"* ]] \
+  && jq -e '.osm_date == "20260928"' "$source_json" >/dev/null \
+  && pass "sin Geofabrik, usa la caché con un aviso" || fail "sin Geofabrik con caché: $out"
+printf 'roto' >"$BUILD_DIR/cache/osm/colombia-260928.osm.pbf"
+ROUTING_PREFER_CACHE=1 expect_error "sin Geofabrik y con la caché corrupta, falla" "no se pudo leer la lista"
+ROUTING_PREFER_CACHE=1 ROUTING_DATE=20260928 expect_error "sin Geofabrik y con ROUTING_DATE, falla" "no se pudo leer la lista"
+mv "$tmp/colombia.html" "$geofabrik/colombia.html"
+run >/dev/null
+
 # --- Errores: las salidas anteriores quedan intactas ---------------------------
 
 before="$(sha256sum "$opl" "$source_json")"
@@ -103,10 +135,11 @@ for bad in 260928 2026-09-28 "20260928;rm"; do
   ROUTING_DATE="$bad" expect_error "ROUTING_DATE '$bad'" "ROUTING_DATE debe ser AAAAMMDD"
 done
 
+cached_sha="$(sha256sum "$BUILD_DIR/cache/osm/colombia-260928.osm.pbf" | cut -d' ' -f1)"
 echo '0123456789abcdef0123456789abcdef  colombia-260928.osm.pbf' >"$geofabrik/colombia-260928.osm.pbf.md5"
 expect_error "descarga que no coincide con el MD5" "colombia-260928.osm.pbf no coincide con su MD5"
-[[ ! -e "$BUILD_DIR/cache/osm/colombia-260928.osm.pbf.part" && ! -e "$BUILD_DIR/cache/osm/colombia-260928.osm.pbf" ]] \
-  && pass "una descarga mala no queda en la caché" || fail "quedó en caché: $(ls "$BUILD_DIR/cache/osm")"
+[[ ! -e "$BUILD_DIR/cache/osm/colombia-260928.osm.pbf.part" && "$(sha256sum "$BUILD_DIR/cache/osm/colombia-260928.osm.pbf" | cut -d' ' -f1)" == "$cached_sha" ]] \
+  && pass "una descarga mala no queda en la caché ni pisa la anterior" || fail "quedó en caché: $(ls "$BUILD_DIR/cache/osm")"
 
 echo 'sin md5' >"$geofabrik/colombia-260928.osm.pbf.md5"
 expect_error "MD5 ilegible" "no trae el MD5"
