@@ -37,7 +37,10 @@ RUN git clone https://github.com/maplibre/font-maker.git /src \
 FROM alpine:${ALPINE_VERSION} AS osmium
 ARG OSMIUM_TOOL_COMMIT
 RUN apk add --no-cache boost-dev build-base bzip2-dev cmake expat-dev git libosmium-dev lz4-dev nlohmann-json protozero-dev zlib-dev
-RUN git clone https://github.com/osmcode/osmium-tool.git /src     && git -C /src checkout "$OSMIUM_TOOL_COMMIT"     && cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF     && cmake --build /src/build --parallel --target osmium
+RUN git clone https://github.com/osmcode/osmium-tool.git /src \
+    && git -C /src checkout "$OSMIUM_TOOL_COMMIT" \
+    && cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+    && cmake --build /src/build --parallel --target osmium
 
 # Node corre el generador de estilos (scripts/style/*.ts) sin compilar.
 FROM node:${NODE_MAJOR}-alpine${ALPINE_VERSION}

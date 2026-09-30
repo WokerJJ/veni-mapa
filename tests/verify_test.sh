@@ -43,7 +43,8 @@ export REGION_CENTER=-76.149,4.4105 ROUTING_MAX_KB=500
 make_graph() {
   mkdir -p "$BUILD_DIR/routing"
   jq -n '{region: "prueba", osm_date: "20260928", bbox: [-76.3, 4.3, -76, 4.55]}' >"$BUILD_DIR/routing/source.json"
-  node scripts/routing/build.ts --opl "$1" --source "$BUILD_DIR/routing/source.json"     --out "$BUILD_DIR/routing/prueba-rutas.json" >/dev/null
+  node scripts/routing/build.ts --opl "$1" --source "$BUILD_DIR/routing/source.json" \
+    --out "$BUILD_DIR/routing/prueba-rutas.json" >/dev/null
 }
 grep -v '^w7 ' tests/fixtures/routing/red.opl >"$tmp/red-conectada.opl"
 
@@ -165,7 +166,8 @@ done
 
 reset
 out="$(scripts/verify.sh 2>&1)"
-[[ "$out" == *"rutas (foot): desde el centro se llega a"* && "$out" == *"rutas (car)"* ]]   && pass "verifica el grafo de rutas con los dos perfiles" || fail "sin verificación de rutas: $out"
+[[ "$out" == *"rutas (foot): desde el centro se llega a"* && "$out" == *"rutas (car)"* ]] \
+  && pass "verifica el grafo de rutas con los dos perfiles" || fail "sin verificación de rutas: $out"
 
 reset
 rm "$BUILD_DIR/routing/prueba-rutas.json"

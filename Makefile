@@ -59,7 +59,8 @@ extract: ## Extrae la región a build/<región>.pmtiles (reporte en build/extrac
 # Dos pasos: routing-source.sh recorta las vías de OSM (osmium) y build.ts arma el grafo.
 routing: node_modules/.package-lock.json ## Grafo de calles para rutas en build/routing/<región>-rutas.json (OSM de Geofabrik)
 	@scripts/routing-source.sh
-	@node scripts/routing/build.ts --opl $(BUILD_DIR)/routing/$(REGION_NAME)-vias.opl 		--source $(BUILD_DIR)/routing/source.json --out $(BUILD_DIR)/routing/$(REGION_NAME)-rutas.json
+	@node scripts/routing/build.ts --opl $(BUILD_DIR)/routing/$(REGION_NAME)-vias.opl \
+		--source $(BUILD_DIR)/routing/source.json --out $(BUILD_DIR)/routing/$(REGION_NAME)-rutas.json
 
 assets: ## Glyphs y sprites autohospedados en build/assets (verificados por SHA-256)
 	@scripts/assets.sh

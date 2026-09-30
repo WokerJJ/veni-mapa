@@ -33,7 +33,8 @@ problem() {
 # rompe la aritmética (y el bloque que la contiene se saltaría en silencio).
 [[ "$max_mb" =~ ^(0|[1-9][0-9]{0,5})$ ]] \
   || { echo "verify.sh: PMTILES_MAX_MB debe ser un entero sin ceros a la izquierda (recibido: '$max_mb')" >&2; exit 1; }
-[[ "$max_kb" =~ ^(0|[1-9][0-9]{0,5})$ ]]   || { echo "verify.sh: ROUTING_MAX_KB debe ser un entero sin ceros a la izquierda (recibido: '$max_kb')" >&2; exit 1; }
+[[ "$max_kb" =~ ^(0|[1-9][0-9]{0,5})$ ]] \
+  || { echo "verify.sh: ROUTING_MAX_KB debe ser un entero sin ceros a la izquierda (recibido: '$max_kb')" >&2; exit 1; }
 [[ -x "$validator" ]] || { echo "verify.sh: falta $validator (npm ci)" >&2; exit 1; }
 
 # --- Estilos ----------------------------------------------------------------------
@@ -130,7 +131,8 @@ if [[ ! -f "$graph" || ! -f "$source" ]]; then
   problem "falta $graph o $source (make routing)"
 else
   # verify.ts imprime sus propias líneas ok/FAIL; aquí solo se cuenta si falló.
-  node scripts/routing/verify.ts --graph "$graph" --source "$source" --region "$REGION_NAME"     --center="$REGION_CENTER" --max-kb "$max_kb" || problem "el grafo de rutas no pasó la verificación"
+  node scripts/routing/verify.ts --graph "$graph" --source "$source" --region "$REGION_NAME" \
+    --center="$REGION_CENTER" --max-kb "$max_kb" || problem "el grafo de rutas no pasó la verificación"
 fi
 
 if ((problems > 0)); then

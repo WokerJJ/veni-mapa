@@ -20,7 +20,8 @@ reset() {
   mkdir -p "$BUILD_DIR/style" "$BUILD_DIR/assets/fonts/Figtree Regular" "$BUILD_DIR/assets/sprites" "$BUILD_DIR/assets/licenses" "$BUILD_DIR/routing"
   printf 'tiles' >"$BUILD_DIR/prueba.pmtiles"
   echo '{"format":"veni-rutas","version":1}' >"$BUILD_DIR/routing/prueba-rutas.json"
-  jq -n '{region: "prueba", osm_date: "20260928", source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf"}'     >"$BUILD_DIR/routing/source.json"
+  jq -n '{region: "prueba", osm_date: "20260928", source: "https://download.geofabrik.de/south-america/colombia-260928.osm.pbf"}' \
+    >"$BUILD_DIR/routing/source.json"
   jq -n --arg sha "$(sha256sum "$BUILD_DIR/prueba.pmtiles" | cut -d' ' -f1)" \
     '{region: "prueba", protomaps_build: "20260929", bbox: [-76.3, 4.3, -76, 4.55],
       requested_maxzoom: 16, source_maxzoom: 15, bytes: 5, sha256: $sha}' >"$BUILD_DIR/build.json"
