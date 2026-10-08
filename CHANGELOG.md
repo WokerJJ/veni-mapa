@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/WokerJJ/veni-mapa/compare/v0.2.0...v0.2.1) (2026-10-08)
+
+
+### Funcionalidades
+
+* **estilo:** el mapa base no dibuja los locales de comida ([#66](https://github.com/WokerJJ/veni-mapa/issues/66)) ([b8035fb](https://github.com/WokerJJ/veni-mapa/commit/b8035fb8e1276cba0a3b0e25b61a4acb1f0d1d17)), closes [#65](https://github.com/WokerJJ/veni-mapa/issues/65)
+
+
+### Documentación
+
+* bitácora del bloque 6 ([#58](https://github.com/WokerJJ/veni-mapa/issues/58)) ([6d18745](https://github.com/WokerJJ/veni-mapa/commit/6d187458a858bead59c3cc4ea9e37f8ad5c756e4))
+
 ## [0.2.0](https://github.com/WokerJJ/veni-mapa/compare/v0.1.1...v0.2.0) (2026-09-30)
 
 
