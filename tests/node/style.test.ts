@@ -44,18 +44,28 @@ const symbolLayer = (style: StyleSpecification, id: string): SymbolLayerSpecific
   return layer;
 };
 
-// Tipos de POI que deja pasar el filtro de la capa `pois`: una lista de
-// permitidos, ["in", ["get", "kind"], ["literal", [...]]], dentro de un "all".
-const poiKinds = (layers: readonly LayerSpecification[]): string[] => {
+// Locales de comida que el mapa base no dibuja. Escrita a mano y no tomada de
+// HIDDEN_POI_KINDS: si alguien acorta la constante, esta lista sigue diciendo
+// qué no debe verse.
+const FOOD_KINDS = ["restaurant", "fast_food", "cafe", "bar"];
+
+const poiFilter = (layers: readonly LayerSpecification[]): unknown[] => {
   const layer = layers.find((l) => l.id === "pois");
   assert.ok(layer && "filter" in layer && Array.isArray(layer.filter), "falta el filtro de la capa pois");
-  const allowed = (layer.filter as unknown[]).find(
+  return layer.filter as unknown[];
+};
+
+// La parte del filtro de `pois` que lista los tipos permitidos:
+// ["in", ["get", "kind"], ["literal", [...]]], dentro de un "all".
+const poiKindsClause = (layers: readonly LayerSpecification[]): ["in", ["get", "kind"], ["literal", string[]]] => {
+  const clause = poiFilter(layers).find(
     (part): part is ["in", ["get", "kind"], ["literal", string[]]] =>
       Array.isArray(part) && part[0] === "in" && JSON.stringify(part[1]) === '["get","kind"]',
   );
-  assert.ok(allowed, "el filtro de pois ya no es una lista de tipos permitidos");
-  return allowed[2][1];
+  assert.ok(clause, "el filtro de pois ya no es una lista de tipos permitidos");
+  return clause;
 };
+const poiKinds = (layers: readonly LayerSpecification[]): string[] => poiKindsClause(layers)[2][1];
 
 // Fontstacks que genera `make assets`: claves de config/fontstacks.yml.
 const publishedFonts = new Set(
@@ -116,14 +126,18 @@ describe("puntos de interés", () => {
   for (const key of styles.keys()) {
     it(`${key} no dibuja los locales de comida`, () => {
       const kinds = poiKinds(styleFor(key).layers);
-      assert.deepEqual(HIDDEN_POI_KINDS.filter((kind) => kinds.includes(kind)), []);
+      assert.deepEqual(FOOD_KINDS.filter((kind) => kinds.includes(kind)), []);
     });
   }
 
-  it("los demás puntos de interés siguen en el mapa", () => {
-    const upstream = poiKinds(layers("protomaps", FLAVORS.claro, { lang: "es" }));
-    const hidden = new Set<string>(HIDDEN_POI_KINDS);
-    assert.deepEqual(poiKinds(styleFor("claro-es").layers), upstream.filter((kind) => !hidden.has(kind)));
+  it("del filtro de basemaps solo cambia la lista de tipos: los demás siguen y el zoom mínimo también", () => {
+    const upstream = layers("protomaps", FLAVORS.claro, { lang: "es" });
+    const upstreamKinds = poiKinds(upstream);
+    const ours = structuredClone(styleFor("claro-es").layers);
+    assert.deepEqual(poiKinds(ours), upstreamKinds.filter((kind) => !FOOD_KINDS.includes(kind)));
+    // Con la lista original repuesta, el filtro tiene que ser el de basemaps.
+    poiKindsClause(ours)[2][1] = upstreamKinds;
+    assert.deepEqual(poiFilter(ours), poiFilter(upstream));
   });
 
   it("HIDDEN_POI_KINDS no nombra tipos que basemaps ya no dibuja", () => {
