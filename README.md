@@ -216,6 +216,7 @@ Cuatro estilos MapLibre generados con [`@protomaps/basemaps`](https://github.com
 
 - Los tintes se calculan desde los tokens de la marca (`mix()`), así un cambio de marca se propaga.
 - Etiquetas en español (`name:es`) o inglés (`name:en`), con el nombre local como respaldo.
+- El mapa base no dibuja los locales de comida (`restaurant`, `fast_food`, `cafe` y `bar`): la app los muestra con sus propios marcadores, y verlos dos veces confunde. Los datos siguen en el PMTiles; la lista está en `HIDDEN_POI_KINDS` ([`scripts/style/style.ts`](scripts/style/style.ts)).
 - Toda capa con texto llega a 4.5:1 de contraste contra su halo, medido sobre el estilo generado; arrebol nunca es color de texto sobre fondo claro. Lo verifican las pruebas (`make check`).
 
 ### Dónde se publican
