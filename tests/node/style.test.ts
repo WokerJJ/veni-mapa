@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
 import type { LayerSpecification, StyleSpecification, SymbolLayerSpecification } from "@maplibre/maplibre-gl-style-spec";
-import { BRAND, mix } from "../../scripts/style/flavors.ts";
+import { layers } from "@protomaps/basemaps";
+import { BRAND, FLAVORS, mix } from "../../scripts/style/flavors.ts";
 import {
   buildStyle,
   fontsUsed,
+  HIDDEN_POI_KINDS,
   LANGS,
   normalizeBaseUrl,
   parseBbox,
@@ -40,6 +42,19 @@ const symbolLayer = (style: StyleSpecification, id: string): SymbolLayerSpecific
   const layer = style.layers.find((l) => l.id === id);
   assert.ok(layer?.type === "symbol", `falta la capa symbol ${id}`);
   return layer;
+};
+
+// Tipos de POI que deja pasar el filtro de la capa `pois`: una lista de
+// permitidos, ["in", ["get", "kind"], ["literal", [...]]], dentro de un "all".
+const poiKinds = (layers: readonly LayerSpecification[]): string[] => {
+  const layer = layers.find((l) => l.id === "pois");
+  assert.ok(layer && "filter" in layer && Array.isArray(layer.filter), "falta el filtro de la capa pois");
+  const allowed = (layer.filter as unknown[]).find(
+    (part): part is ["in", ["get", "kind"], ["literal", string[]]] =>
+      Array.isArray(part) && part[0] === "in" && JSON.stringify(part[1]) === '["get","kind"]',
+  );
+  assert.ok(allowed, "el filtro de pois ya no es una lista de tipos permitidos");
+  return allowed[2][1];
 };
 
 // Fontstacks que genera `make assets`: claves de config/fontstacks.yml.
@@ -94,6 +109,26 @@ describe("estructura", () => {
     assert.ok(Array.isArray(icon));
     assert.equal(icon[0], "coalesce");
     assert.deepEqual(icon.at(-1), ["image", "townspot"]);
+  });
+});
+
+describe("puntos de interés", () => {
+  for (const key of styles.keys()) {
+    it(`${key} no dibuja los locales de comida`, () => {
+      const kinds = poiKinds(styleFor(key).layers);
+      assert.deepEqual(HIDDEN_POI_KINDS.filter((kind) => kinds.includes(kind)), []);
+    });
+  }
+
+  it("los demás puntos de interés siguen en el mapa", () => {
+    const upstream = poiKinds(layers("protomaps", FLAVORS.claro, { lang: "es" }));
+    const hidden = new Set<string>(HIDDEN_POI_KINDS);
+    assert.deepEqual(poiKinds(styleFor("claro-es").layers), upstream.filter((kind) => !hidden.has(kind)));
+  });
+
+  it("HIDDEN_POI_KINDS no nombra tipos que basemaps ya no dibuja", () => {
+    const upstream = poiKinds(layers("protomaps", FLAVORS.claro, { lang: "es" }));
+    assert.deepEqual(HIDDEN_POI_KINDS.filter((kind) => !upstream.includes(kind)), []);
   });
 });
 

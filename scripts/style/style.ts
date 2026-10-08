@@ -15,6 +15,11 @@ const SOURCE = "protomaps";
 // barrios y veredas, departamentos y países.
 export const PLACE_LAYERS = ["places_locality", "places_subplace", "places_region", "places_country"] as const;
 
+// Tipos de POI que el mapa base no dibuja. Los locales de comida los muestra
+// la app con sus propios marcadores, y verlos dos veces, con otro ícono y sin
+// poder tocarlos, confunde. Los datos siguen en el PMTiles.
+export const HIDDEN_POI_KINDS = ["restaurant", "fast_food", "cafe", "bar"] as const;
+
 // Fuente que MapLibre usa cuando una capa symbol no define text-font. No se
 // publica: si aparece en un estilo, las etiquetas darían 404.
 export const MAPLIBRE_DEFAULT_FONTS = ["Open Sans Regular", "Arial Unicode MS Regular"] as const;
@@ -75,6 +80,17 @@ function replaceFonts(value: unknown): unknown {
 }
 
 const PLACE_LAYER_IDS = new Set<string>(PLACE_LAYERS);
+const HIDDEN_POI_KIND_SET = new Set<unknown>(HIDDEN_POI_KINDS);
+
+// Quita los tipos ocultos de las listas del filtro de `pois`, que es una
+// lista de permitidos: ["in", ["get", "kind"], ["literal", [...]]].
+function withoutHiddenPoiKinds(expression: unknown): unknown {
+  if (!Array.isArray(expression)) return expression;
+  if (expression[0] === "literal" && Array.isArray(expression[1])) {
+    return ["literal", expression[1].filter((kind) => !HIDDEN_POI_KIND_SET.has(kind))];
+  }
+  return expression.map(withoutHiddenPoiKinds);
+}
 
 function brandLayer(layer: LayerSpecification): LayerSpecification {
   if (!("layout" in layer) || !layer.layout) return layer;
@@ -82,10 +98,12 @@ function brandLayer(layer: LayerSpecification): LayerSpecification {
   if (PLACE_LAYER_IDS.has(layer.id) && "text-font" in layout) {
     layout["text-font"] = [FONTS.places];
   }
-  if (layer.id === "pois" && layout["icon-image"] !== undefined) {
+  if (layer.id !== "pois") return { ...layer, layout } as LayerSpecification;
+  if (layout["icon-image"] !== undefined) {
     layout["icon-image"] = ["coalesce", ["image", layout["icon-image"]], ["image", FALLBACK_ICON]];
   }
-  return { ...layer, layout } as LayerSpecification;
+  const filter = "filter" in layer ? layer.filter : undefined;
+  return { ...layer, layout, filter: withoutHiddenPoiKinds(filter) } as LayerSpecification;
 }
 
 export function normalizeBaseUrl(raw: string): string {
