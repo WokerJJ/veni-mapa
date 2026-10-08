@@ -47,6 +47,8 @@ Guías oficiales: [Cómo contribuir](https://wiki.openstreetmap.org/wiki/ES:C%C3
 
 En total, entre unos días y algo más de un mes. Si hace falta antes, se puede lanzar la actualización a mano (*Actions → Actualizar extracto → Run workflow*).
 
+Los restaurantes, cafés, comidas rápidas y bares llegan al archivo del mapa, pero el mapa base no los dibuja: los muestra la app con sus propios marcadores (ver [Estilos](../README.md#estilos)). Las calles, los parques y el resto de los lugares sí se ven en el mapa base.
+
 El extracto llega hasta el zoom 15. Algunos elementos pequeños (por ejemplo, ciertos puntos de interés) solo aparecen al acercarse, según las reglas del estilo base de Protomaps.
 
 ## Atribución

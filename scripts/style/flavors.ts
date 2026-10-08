@@ -118,8 +118,9 @@ export const CLARO: Flavor = {
   address_label: BRAND.ciruelaSuave,
   address_label_halo: BRAND.blanco,
 
-  // Etiquetas de POI (halo = tierra): tonos oscurecidos hasta 4.5:1. Comida en
-  // mango oscuro, el color de la marca asociado a comer.
+  // Etiquetas de POI (halo = tierra): tonos oscurecidos hasta 4.5:1. El mango
+  // oscuro era el de la comida, que el mapa base ya no dibuja (HIDDEN_POI_KINDS
+  // en style.ts): se conserva porque basemaps espera el color.
   pois: {
     blue: "#15668A",
     green: "#1C6B3F",
@@ -201,7 +202,8 @@ export const OSCURO: Flavor = {
   address_label: "#CDBBD8",
   address_label_halo: BRAND.ciruela,
 
-  // POI sobre tierra ciruela: tonos claros hasta 4.5:1; comida en mango.
+  // POI sobre tierra ciruela: tonos claros hasta 4.5:1. El mango era el de la
+  // comida, que el mapa base ya no dibuja; se conserva porque basemaps lo espera.
   pois: {
     blue: "#6FB6D6",
     green: "#5FD08F",
