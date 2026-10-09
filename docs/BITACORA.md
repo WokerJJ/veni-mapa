@@ -189,3 +189,30 @@ Diario de avance por bloques (máximo 3 issues por bloque).
 - Una prueba que dice "la ruta se dibuja" tiene que mirar la geometría, no solo que exista la capa.
 
 **Sigue:** #55 (aprobar el grafo en la actualización mensual) y la etapa 2, la app veni-roldanillo.
+
+## 2026-10-09 · Bloque 7: el mapa base sin locales de comida (v0.2.1)
+
+**Issues cerrados:** #65 el mapa base no dibuja los locales de comida (PR #66). Se publicó **v0.2.1**, pero sin archivos adjuntos (ver «Qué quedó pendiente»).
+
+**Qué quedó**
+
+- La capa `pois` de los cuatro estilos deja fuera `restaurant`, `fast_food`, `cafe` y `bar` (`HIDDEN_POI_KINDS`). Pasa de 36 tipos a 32; los datos siguen en el PMTiles.
+- La app muestra esos lugares con sus propios marcadores. Verlos dos veces, con otro ícono y sin poder tocarlos, confundía.
+- La guía para contribuir en OpenStreetMap aclara que esos locales llegan al archivo del mapa pero los dibuja la app.
+- La demo de GitHub Pages ya publica los estilos nuevos, que son los que hoy usa la app.
+
+**Decisiones**
+
+- El filtro se cambia en el generador de estilos y no en la app: el estilo es de este repositorio, y parcharlo desde la app la ataría a nombres internos de capas.
+- La lista de tipos ocultos va escrita también en la prueba. Con la constante como única referencia, acortarla dejaba las pruebas en verde.
+
+**Aprendizajes**
+
+- La prueba compara el filtro entero con el de basemaps y solo le repone la lista de tipos: así también se nota si se pierde la condición de zoom.
+- Una captura de «antes y después» en la demo local no sirvió: su extracto era más viejo que el publicado y no traía esos locales.
+
+**Qué quedó pendiente**
+
+- **La release 0.2.1 no tiene archivos (#67).** El job que los arma vuelve a recortar el extracto desde la build de Protomaps anotada en `data/build.json`, y Protomaps ya había borrado esa build. Cualquier release que salga más de una semana después de la última actualización de datos falla igual.
+- Sigue abierto el PR de la actualización mensual del extracto (#61).
+- #64: el estilo pide el ícono `townhall` y el sprite no lo trae.
