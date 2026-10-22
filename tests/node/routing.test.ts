@@ -396,6 +396,19 @@ describe("ajuste a la calle", () => {
     }
   });
 
+  it("un punto lejos de la caja de la red, hasta cerca de un polo, no tiene ajuste y responde enseguida (#77)", () => {
+    const router = manzana("");
+    const started = performance.now();
+    for (const profile of ["foot", "car"] as const) {
+      assert.equal(router.snap([0, 89.9999], profile), null);
+      assert.equal(router.snap([-76.155, -89.9999], profile), null);
+      assert.equal(router.snap([-76.155, 4.45], profile), null); // ~2 km al norte
+      assert.equal(router.snap([Number.NaN, 4.43], profile), null);
+      assert.notEqual(router.snap([-76.155, 4.437], profile), null); // ~550 m al norte
+    }
+    assert.ok(performance.now() - started < 100);
+  });
+
   it("origen y destino en la misma arista: el tramo directo", () => {
     const r = manzana("");
     const desde: LngLat = [-76.158, 4.4301];
