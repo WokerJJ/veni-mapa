@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/WokerJJ/veni-mapa/compare/v0.2.2...v0.2.3) (2026-10-22)
+
+
+### Correcciones
+
+* **rutas:** snap no recorre la grilla fuera de la caja de la red ([#78](https://github.com/WokerJJ/veni-mapa/issues/78)) ([b80dd1d](https://github.com/WokerJJ/veni-mapa/commit/b80dd1dfd552086fcd48dbdfe99b3a4e8dd8f6e8)), closes [#77](https://github.com/WokerJJ/veni-mapa/issues/77)
+
 ## [0.2.2](https://github.com/WokerJJ/veni-mapa/compare/v0.2.1...v0.2.2) (2026-10-22)
 
 
