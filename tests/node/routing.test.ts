@@ -273,15 +273,16 @@ describe("rutas", () => {
     const g = buildGraph(parseOpl(lines.join("\n")), meta);
     const r = new Router(g);
 
-    // Dijkstra simple, sin heurística, sobre las mismas aristas.
+    // Dijkstra simple, sin heurística, sobre las mismas aristas: desde los
+    // extremos de la arista del origen, con el costo del tramo parcial de salida.
     const speed = (cls: number): number => CLASSES[cls]!.carKmh! / 3.6;
-    const dijkstra = (s: number, t: number): number => {
-      const best = new Map<number, number>([[s, 0]]);
-      const open = new Set([s]);
+    const dijkstra = (starts: [number, number][]): Map<number, number> => {
+      const best = new Map<number, number>();
+      for (const [s, t0] of starts) if (t0 < (best.get(s) ?? Infinity)) best.set(s, t0);
+      const open = new Set(best.keys());
       while (open.size > 0) {
         const v = [...open].reduce((a, b) => (best.get(a)! <= best.get(b)! ? a : b));
         open.delete(v);
-        if (v === t) return best.get(v)!;
         for (let e = 0; e < g.edges.length / EDGE_STRIDE; e++) {
           const [a, b, dm, fl, cls] = g.edges.slice(e * EDGE_STRIDE, e * EDGE_STRIDE + EDGE_STRIDE) as [number, number, number, number, number];
           const cost = dm / 10 / speed(cls);
@@ -295,16 +296,51 @@ describe("rutas", () => {
           }
         }
       }
-      return Infinity;
+      return best;
+    };
+    // Tiempo más corto entre dos puntos ajustados: por la red, saliendo y
+    // entrando por los extremos que permite el sentido (un tramo de largo cero
+    // vale en cualquier sentido), o directo si están en la misma arista.
+    const expected = (from: LngLat): ((to: LngLat) => number) => {
+      const s = r.snap(from, "car")!;
+      const arista = (e: number) => {
+        const [a, b, dm, fl, cls] = g.edges.slice(e * EDGE_STRIDE, e * EDGE_STRIDE + EDGE_STRIDE) as [number, number, number, number, number];
+        return { a, b, fl, seconds: (fraction: number): number => (fraction * dm) / 10 / speed(cls) };
+      };
+      const se = arista(s.edge);
+      const best = dijkstra([
+        [se.a, se.fl & CAR_BACKWARD || s.fraction === 0 ? se.seconds(s.fraction) : Infinity],
+        [se.b, se.fl & CAR_FORWARD || s.fraction === 1 ? se.seconds(1 - s.fraction) : Infinity],
+      ]);
+      return (to) => {
+        const t = r.snap(to, "car")!;
+        const te = arista(t.edge);
+        let result = Math.min(
+          (best.get(te.a) ?? Infinity) + (te.fl & CAR_FORWARD || t.fraction === 0 ? te.seconds(t.fraction) : Infinity),
+          (best.get(te.b) ?? Infinity) + (te.fl & CAR_BACKWARD || t.fraction === 1 ? te.seconds(1 - t.fraction) : Infinity),
+        );
+        if (s.edge === t.edge) {
+          const delta = t.fraction - s.fraction;
+          if (delta === 0 || (delta > 0 && se.fl & CAR_FORWARD) || (delta < 0 && se.fl & CAR_BACKWARD)) {
+            result = Math.min(result, se.seconds(Math.abs(delta)));
+          }
+        }
+        return result;
+      };
     };
 
+    // Esquinas y puntos a mitad de cuadra, dos de ellos en la misma cuadra (fila 2, entre x = 1 y 2).
     const corners: LngLat[] = [[-76.2, 4.4], [-76.189, 4.411], [-76.2, 4.411], [-76.189, 4.4], [-76.195, 4.405]];
-    for (const from of corners) {
-      for (const to of corners) {
+    const midBlock: LngLat[] = [[-76.1945, 4.405], [-76.1903, 4.4071], [-76.1982, 4.402], [-76.1987, 4.402], [-76.193, 4.4084]];
+    const points = [...corners, ...midBlock];
+    assert.equal(r.snap(midBlock[2]!, "car")!.edge, r.snap(midBlock[3]!, "car")!.edge, "los dos puntos de la misma cuadra");
+    for (const from of points) {
+      const desde = expected(from);
+      for (const to of points) {
         const ruta = r.route(from, to, "car");
-        const expected = dijkstra(r.nearest(from, "car"), r.nearest(to, "car"));
-        if (expected === Infinity) assert.equal(ruta, null);
-        else assert.ok(Math.abs(ruta!.duration - expected) < 1e-6, `${from} → ${to}: A* ${ruta?.duration}, Dijkstra ${expected}`);
+        const want = desde(to);
+        if (want === Infinity) assert.equal(ruta, null);
+        else assert.ok(Math.abs(ruta!.duration - want) < 1e-6, `${from} → ${to}: A* ${ruta?.duration}, Dijkstra ${want}`);
       }
     }
   });
@@ -413,6 +449,121 @@ describe("ajuste a la calle", () => {
       assert.ok(Math.abs(largo(...ruta.coordinates) - ruta.distance) < 2, `${perfil}: ${ruta.distance}`);
     }
   });
+
+  it("en vehículo, a menos de 2 m del final de un sentido único se llega por el cruce, sin rodear", () => {
+    const r = manzana(",oneway=yes"); // de P1 a P2
+    // ~0,4 m al oeste de P2: en rigor habría que entrar por P1 y recorrer toda la calle de abajo.
+    const casiP2: LngLat = [-76.150004, 4.43];
+    const ruta = r.route(Q1, casiP2, "car")!;
+    assert.ok(Math.abs(ruta.distance - largo(Q1, P4, P2)) < 1, `distancia ${ruta.distance}, se espera ${largo(Q1, P4, P2)}`);
+    assert.deepEqual(ruta.coordinates, [Q1, P4, P2]);
+  });
+
+  it("en vehículo, contra el sentido único no vale el tramo directo por la misma arista", () => {
+    const r = manzana(",oneway=-1"); // de P2 a P1
+    const o: LngLat = [-76.158, 4.43];
+    const e: LngLat = [-76.152, 4.43];
+    const carro = r.route(o, e, "car")!;
+    // Sale hacia P1 (a favor) y da la vuelta por arriba para entrar por P2.
+    assert.notEqual(carro.coordinates.length, 2, JSON.stringify(carro.coordinates));
+    const vuelta = largo(o, P1, P3, Q1, P4, P2, e);
+    assert.ok(Math.abs(carro.distance - vuelta) < 3, `en carro ${carro.distance}, se espera ${vuelta}`);
+    assert.ok(cerca(carro.coordinates[1]!, P1) && cerca(carro.coordinates.at(-2)!, P2), JSON.stringify(carro.coordinates));
+    // A pie sí es el tramo directo.
+    assert.equal(r.route(o, e, "foot")!.coordinates.length, 2);
+  });
+
+  it("un punto a ~900 m de una vía larga sin cruces tiene ruta aunque no haya un vértice a menos de 1 km", () => {
+    // Una sola vía de ~4,4 km: sus dos vértices quedan a más de 2 km del punto.
+    const r = new Router(buildGraph(parseOpl("w300 v1 Thighway=residential Nn300x-76.3y4.45,n301x-76.26y4.45\n"), meta));
+    const lejos: LngLat = [-76.28, 4.4581];
+    const sobreLaVia: LngLat = [-76.27, 4.45];
+    for (const perfil of ["foot", "car"] as const) {
+      // nearest (obsoleto) busca vértices: no encuentra ninguno y no sirve para decidir la cercanía.
+      assert.equal(r.nearest(lejos, perfil), -1);
+      const ajuste = r.snap(lejos, perfil);
+      assert.ok(ajuste, `${perfil}: sin ajuste`);
+      assert.ok(ajuste.distance > 850 && ajuste.distance < 950, `${perfil}: ajuste a ${ajuste.distance} m`);
+      assert.ok(r.route(lejos, sobreLaVia, perfil), `${perfil}: sin ruta`);
+    }
+  });
+});
+
+describe("ajuste a la calle: puntos a mitad de una arista con puntos intermedios", () => {
+  // La calle de abajo tiene tres puntos intermedios, así que cada punto ajustado
+  // cae en un tramo (segment) de 0 a 3:
+  //
+  //   P3 ───────────────────────── P4      w111
+  //   │                            │       w112 y w113 a los lados
+  //   P1 ── M1 ── M2 ── M3 ──────── P2      w110, doble sentido
+  const P1: LngLat = [-76.16, 4.43];
+  const M1: LngLat = [-76.1575, 4.4302];
+  const M2: LngLat = [-76.155, 4.4298];
+  const M3: LngLat = [-76.1525, 4.4302];
+  const P2: LngLat = [-76.15, 4.43];
+  const P3: LngLat = [-76.16, 4.432];
+  const P4: LngLat = [-76.15, 4.432];
+  const node = (id: number, [x, y]: LngLat): string => `n${id}x${x}y${y}`;
+  const r = new Router(
+    buildGraph(
+      parseOpl(
+        [
+          `w110 v1 Thighway=residential N${node(400, P1)},${node(410, M1)},${node(411, M2)},${node(412, M3)},${node(401, P2)}`,
+          `w111 v1 Thighway=residential N${node(402, P3)},${node(403, P4)}`,
+          `w112 v1 Thighway=residential N${node(400, P1)},${node(402, P3)}`,
+          `w113 v1 Thighway=residential N${node(401, P2)},${node(403, P4)}`,
+        ].join("\n"),
+      ),
+      meta,
+    ),
+  );
+  const largo = (...puntos: LngLat[]): number => puntos.slice(1).reduce((m, p, i) => m + distanceM(...puntos[i]!, ...p), 0);
+  // Junto a la calle de abajo, en los tramos 1 (M1-M2) y 2 (M2-M3), y en los lados cerca de P1 y P2.
+  const enTramo1: LngLat = [-76.156, 4.4296];
+  const enTramo2: LngLat = [-76.1535, 4.4296];
+  const izquierda: LngLat = [-76.1601, 4.4305];
+  const derecha: LngLat = [-76.1499, 4.4305];
+
+  for (const perfil of ["foot", "car"] as const) {
+    const punto = (p: LngLat): LngLat => r.snap(p, perfil)!.point;
+
+    it(`${perfil}: los puntos ajustados caen en los tramos 1 y 2 de la arista`, () => {
+      assert.equal(r.snap(enTramo1, perfil)!.segment, 1);
+      assert.equal(r.snap(enTramo2, perfil)!.segment, 2);
+    });
+
+    it(`${perfil}: misma arista, del tramo 1 al 2 y al revés, pasando por M2`, () => {
+      const [t1, t2] = [punto(enTramo1), punto(enTramo2)];
+      const ida = r.route(enTramo1, enTramo2, perfil)!;
+      assert.deepEqual(ida.coordinates, [t1, M2, t2]);
+      assert.ok(Math.abs(ida.distance - largo(t1, M2, t2)) < 1, `ida ${ida.distance}`);
+      const vuelta = r.route(enTramo2, enTramo1, perfil)!;
+      assert.deepEqual(vuelta.coordinates, [t2, M2, t1]);
+      assert.ok(Math.abs(vuelta.distance - largo(t2, M2, t1)) < 1, `vuelta ${vuelta.distance}`);
+    });
+
+    it(`${perfil}: se llega a mitad de la arista por cualquiera de sus extremos, con sus puntos intermedios`, () => {
+      const [t1, t2, izq, der] = [punto(enTramo1), punto(enTramo2), punto(izquierda), punto(derecha)];
+      // Por P1 (el vértice desde de la arista).
+      assert.deepEqual(r.route(izquierda, enTramo1, perfil)!.coordinates, [izq, P1, M1, t1]);
+      assert.deepEqual(r.route(izquierda, enTramo2, perfil)!.coordinates, [izq, P1, M1, M2, t2]);
+      // Por P2 (el vértice hasta).
+      assert.deepEqual(r.route(derecha, enTramo2, perfil)!.coordinates, [der, P2, M3, t2]);
+      assert.deepEqual(r.route(derecha, enTramo1, perfil)!.coordinates, [der, P2, M3, M2, t1]);
+    });
+
+    it(`${perfil}: se sale de mitad de la arista por cualquiera de sus extremos, con sus puntos intermedios`, () => {
+      const [t1, t2, izq, der] = [punto(enTramo1), punto(enTramo2), punto(izquierda), punto(derecha)];
+      // Hacia P1.
+      assert.deepEqual(r.route(enTramo1, izquierda, perfil)!.coordinates, [t1, M1, P1, izq]);
+      assert.deepEqual(r.route(enTramo2, izquierda, perfil)!.coordinates, [t2, M2, M1, P1, izq]);
+      // Hacia P2.
+      assert.deepEqual(r.route(enTramo2, derecha, perfil)!.coordinates, [t2, M3, P2, der]);
+      const ruta = r.route(enTramo1, derecha, perfil)!;
+      assert.deepEqual(ruta.coordinates, [t1, M2, M3, P2, der]);
+      assert.ok(Math.abs(ruta.distance - largo(...ruta.coordinates)) < 1, `distancia ${ruta.distance}`);
+    });
+  }
 });
 
 describe("CLI", () => {
