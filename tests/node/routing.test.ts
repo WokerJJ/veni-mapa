@@ -315,6 +315,106 @@ describe("rutas", () => {
   });
 });
 
+describe("ajuste a la calle", () => {
+  // Una manzana larga, con una calle sin salida que baja desde la calle de arriba:
+  //
+  //   P3 ──────── Q1 ──────── P4      w101
+  //   │           │           │       w102 y w103 a los lados
+  //   │           Q2          │       w104, sin salida (Q2 a ~55 m de la de abajo)
+  //   P1 ──────────────────── P2      w100, ~1,1 km sin cruces
+  const P1: LngLat = [-76.16, 4.43];
+  const P2: LngLat = [-76.15, 4.43];
+  const P3: LngLat = [-76.16, 4.432];
+  const P4: LngLat = [-76.15, 4.432];
+  const Q1: LngLat = [-76.155, 4.432];
+  const Q2: LngLat = [-76.155, 4.4305];
+  const manzana = (abajo: string): Router => {
+    const node = (id: number, [x, y]: LngLat): string => `n${id}x${x}y${y}`;
+    const lines = [
+      `w100 v1 Thighway=residential${abajo} N${node(200, P1)},${node(201, P2)}`,
+      `w101 v1 Thighway=residential N${node(202, P3)},${node(204, Q1)},${node(203, P4)}`,
+      `w102 v1 Thighway=residential N${node(200, P1)},${node(202, P3)}`,
+      `w103 v1 Thighway=residential N${node(201, P2)},${node(203, P4)}`,
+      `w104 v1 Thighway=residential N${node(204, Q1)},${node(205, Q2)}`,
+    ];
+    return new Router(buildGraph(parseOpl(lines.join("\n")), meta));
+  };
+  const cerca = (a: LngLat, b: LngLat): boolean => distanceM(...a, ...b) < 0.5;
+  const largo = (...puntos: LngLat[]): number => puntos.slice(1).reduce((m, p, i) => m + distanceM(...puntos[i]!, ...p), 0);
+
+  it("un destino a mitad de una calle larga se ajusta a la calle, no a la calle sin salida vecina", () => {
+    const r = manzana("");
+    // A ~11 m de la calle de abajo y a ~45 m de Q2, el vértice más cercano.
+    const destino: LngLat = [-76.1549, 4.4301];
+    const v = r.nearest(destino, "car");
+    assert.deepEqual([r.lon[v], r.lat[v]], Q2);
+    const sobreLaCalle: LngLat = [-76.1549, 4.43];
+    for (const perfil of ["foot", "car"] as const) {
+      const ruta = r.route(P1, destino, perfil)!;
+      assert.ok(cerca(ruta.coordinates.at(-1)!, sobreLaCalle), `${perfil}: termina en ${ruta.coordinates.at(-1)}`);
+      // Derecho por la calle de abajo: sin dar la vuelta a la manzana.
+      assert.equal(ruta.coordinates.length, 2, `${perfil}: ${JSON.stringify(ruta.coordinates)}`);
+      assert.ok(Math.abs(ruta.distance - largo(P1, sobreLaCalle)) < 2, `${perfil}: distancia ${ruta.distance}`);
+      assert.ok(Math.abs(ruta.snap.to - distanceM(...destino, ...sobreLaCalle)) < 0.5, `${perfil}: snap ${ruta.snap.to}`);
+      assert.equal(ruta.snap.from, 0);
+    }
+  });
+
+  it("origen y destino en la misma arista: el tramo directo", () => {
+    const r = manzana("");
+    const desde: LngLat = [-76.158, 4.4301];
+    const hasta: LngLat = [-76.152, 4.4299];
+    for (const perfil of ["foot", "car"] as const) {
+      for (const [a, b] of [[desde, hasta], [hasta, desde]] as const) {
+        const ruta = r.route(a, b, perfil)!;
+        assert.equal(ruta.coordinates.length, 2, `${perfil}: ${JSON.stringify(ruta.coordinates)}`);
+        assert.ok(cerca(ruta.coordinates[0]!, [a[0], 4.43]) && cerca(ruta.coordinates[1]!, [b[0], 4.43]));
+        assert.ok(Math.abs(ruta.distance - distanceM(a[0], 4.43, b[0], 4.43)) < 2, `${perfil}: distancia ${ruta.distance}`);
+      }
+    }
+  });
+
+  it("en vehículo, el sentido único decide por qué extremo se sale y si vale el tramo directo", () => {
+    const r = manzana(",oneway=yes"); // de P1 a P2
+    const oeste: LngLat = [-76.158, 4.4301];
+    const este: LngLat = [-76.152, 4.4301];
+    const o: LngLat = [oeste[0], 4.43];
+    const e: LngLat = [este[0], 4.43];
+    // A favor: directo, en los dos perfiles.
+    for (const perfil of ["foot", "car"] as const) {
+      assert.ok(Math.abs(r.route(oeste, este, perfil)!.distance - largo(o, e)) < 2, perfil);
+    }
+    // En contra, a pie: directo.
+    const aPie = r.route(este, oeste, "foot")!;
+    assert.equal(aPie.coordinates.length, 2);
+    assert.ok(Math.abs(aPie.distance - largo(e, o)) < 2, `a pie ${aPie.distance}`);
+    // En contra, en carro: sale hacia P2 y da la vuelta por arriba.
+    const carro = r.route(este, oeste, "car")!;
+    const vuelta = largo(e, P2, P4, Q1, P3, P1, o);
+    assert.ok(Math.abs(carro.distance - vuelta) < 3, `en carro ${carro.distance}, se espera ${vuelta}`);
+    assert.ok(cerca(carro.coordinates[0]!, e) && cerca(carro.coordinates[1]!, P2), JSON.stringify(carro.coordinates));
+    assert.ok(cerca(carro.coordinates.at(-2)!, P1) && cerca(carro.coordinates.at(-1)!, o));
+  });
+
+  it("a menos de 2 m de un cruce cuenta como el cruce: el sentido único no obliga a rodear", () => {
+    const r = manzana(",oneway=yes"); // de P1 a P2
+    // ~0,4 m al este de P1, sobre la de sentido único: en rigor habría que seguir hasta P2.
+    const casiP1: LngLat = [-76.159996, 4.43];
+    const ruta = r.route(casiP1, P3, "car")!;
+    assert.ok(Math.abs(ruta.distance - largo(P1, P3)) < 1, `distancia ${ruta.distance}`);
+    assert.deepEqual(ruta.coordinates, [P1, P3]);
+    assert.ok(Math.abs(ruta.snap.from - distanceM(...casiP1, ...P1)) < 0.05, `snap ${ruta.snap.from}`);
+  });
+
+  it("la distancia de la ruta es la suma de los tramos dibujados", () => {
+    const r = manzana(",oneway=yes");
+    for (const perfil of ["foot", "car"] as const) {
+      const ruta = r.route([-76.1531, 4.4318], [-76.1587, 4.4302], perfil)!;
+      assert.ok(Math.abs(largo(...ruta.coordinates) - ruta.distance) < 2, `${perfil}: ${ruta.distance}`);
+    }
+  });
+});
+
 describe("CLI", () => {
   const dir = mkdtempSync(join(tmpdir(), "rutas-"));
   after(() => rmSync(dir, { recursive: true, force: true }));
