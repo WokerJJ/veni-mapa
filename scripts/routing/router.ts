@@ -10,14 +10,20 @@
 // en línea recta a la velocidad máxima del perfil, que nunca sobreestima: la
 // ruta encontrada es la más rápida del grafo.
 //
-// Los puntos se ajustan al vértice más cercano de la red principal del perfil
-// (su mayor componente fuertemente conexa: desde cualquiera de sus vértices se
-// llega a todos los demás). Así un punto junto a una calle aislada o al final de
-// un sentido único sin salida se ajusta a la red y siempre tiene ruta.
+// Los puntos se ajustan al punto más cercano sobre una calle de la red principal
+// del perfil (su mayor componente fuertemente conexa: desde cualquiera de sus
+// vértices se llega a todos los demás). Así un punto junto a una calle aislada o
+// al final de un sentido único sin salida se ajusta a la red y siempre tiene ruta.
+// La ruta sale del punto ajustado por cualquiera de los dos extremos de su
+// arista (en vehículo, solo por los que permite el sentido de la vía) con un
+// costo proporcional al tramo recorrido, y si origen y destino caen en la misma
+// arista y el sentido lo permite, la ruta es ese tramo directo. Ajustar al
+// vértice más cercano fallaba en las calles largas: un destino a mitad de cuadra
+// podía quedar en el fondo de una calle sin salida vecina y la ruta daba la
+// vuelta a la manzana.
 //
-// Límites: los puntos se ajustan a un vértice (cruce o extremo de vía), no a un
-// punto sobre la calle; no hay giros prohibidos, semáforos ni tráfico. Es para
-// dibujar el camino, no para navegar paso a paso.
+// Límites: no hay giros prohibidos, semáforos ni tráfico. Es para dibujar el
+// camino, no para navegar paso a paso.
 import {
   CAR_BACKWARD,
   CAR_FORWARD,
@@ -41,19 +47,40 @@ export interface Route {
   distance: number;
   /** Segundos estimados. */
   duration: number;
-  /** Camino para dibujar, del vértice de salida al de llegada. */
+  /** Camino para dibujar, del punto ajustado de salida al de llegada. */
   coordinates: LngLat[];
   /**
-   * Metros entre cada punto pedido y el vértice al que se ajustó: la app puede
-   * dibujar ese tramo aparte o avisar si es largo.
+   * Metros entre cada punto pedido y el punto de la calle al que se ajustó: la
+   * app puede dibujar ese tramo aparte o avisar si es largo.
    */
   snap: { from: number; to: number };
 }
 
-/** Distancia máxima, en metros, entre un punto pedido y el vértice al que se ajusta. */
+/**
+ * Punto de la red principal más cercano a un punto pedido, sobre una arista.
+ * `edge` y `segment` son índices internos del grafo: cambian de una publicación
+ * del grafo a otra, así que no se guardan ni se comparan entre grafos.
+ */
+export interface Snap {
+  /** Arista en la que cae (índice interno, inestable entre publicaciones del grafo). */
+  edge: number;
+  /** Tramo de la arista: entre su punto k y el k + 1, contando los vértices (índice interno, inestable entre publicaciones del grafo). */
+  segment: number;
+  /** Parte del largo de la arista desde su vértice `desde`, de 0 a 1. */
+  fraction: number;
+  /** El punto ajustado, sobre la calle. */
+  point: LngLat;
+  /** Metros entre el punto pedido y el ajustado. */
+  distance: number;
+}
+
+/** Distancia máxima, en metros, entre un punto pedido y el punto de la red al que se ajusta. */
 export const MAX_SNAP_M = 1000;
 
 const CELL_DEG = 0.005; // ~550 m en Roldanillo
+const METERS_PER_DEG = (2 * Math.PI * 6_371_008.8) / 360;
+/** Un punto ajustado a menos de esto de un extremo de su arista se ajusta al vértice. */
+const VERTEX_TOLERANCE_M = 2;
 
 interface Adjacency {
   /** Arcos del vértice v: de start[v] a start[v + 1] en target, edge y reversed. */
@@ -61,10 +88,20 @@ interface Adjacency {
   target: Int32Array;
   edge: Int32Array;
   reversed: Uint8Array;
+  /** 1 en cada vértice de la red principal. */
+  main: Uint8Array;
   /** Vértices de la red principal, por celda de la grilla. */
-  grid: Map<string, number[]>;
+  grid: Map<number, number[]>;
   /** Tamaño de la red principal y cantidad de vértices con algún arco. */
   network: { main: number; total: number };
+}
+
+/** Tramos parciales de route() en las aristas del origen y del destino, en metros (Infinity si el sentido no lo permite). */
+interface PartialLegs {
+  leaveToA: number;
+  leaveToB: number;
+  arriveFromA: number;
+  arriveFromB: number;
 }
 
 export class Router {
@@ -72,7 +109,19 @@ export class Router {
   readonly lat: Float64Array;
   private readonly graph: RoutingGraph;
   private readonly edgeGeometryStart: Int32Array;
+  /**
+   * Línea completa de cada arista (vértice desde, puntos intermedios y vértice
+   * hasta): la de la arista e va de lineStart[e] a lineStart[e + 1] - 1. El tramo
+   * s (entre los puntos k y k + 1 de la arista e) empieza en el punto s + e.
+   */
+  private readonly lineStart: Int32Array;
+  private readonly lineLon: Float64Array;
+  private readonly lineLat: Float64Array;
+  /** Arista de cada tramo. */
+  private readonly segmentEdge: Int32Array;
   private readonly adjacency: Record<Profile, Adjacency>;
+  /** Índice de tramos de cada perfil (ver segments), armado la primera vez que se usa. */
+  private readonly segmentIndex: Partial<Record<Profile, Map<number, number[]>>> = {};
 
   constructor(graph: RoutingGraph) {
     if (graph.format !== FORMAT || graph.version !== VERSION) {
@@ -94,6 +143,30 @@ export class Router {
     this.edgeGeometryStart = new Int32Array(edges + 1);
     for (let e = 0; e < edges; e++) {
       this.edgeGeometryStart[e + 1] = this.edgeGeometryStart[e]! + graph.geometry_counts[e]!;
+    }
+    this.lineStart = new Int32Array(edges + 1);
+    for (let e = 0; e < edges; e++) this.lineStart[e + 1] = this.lineStart[e]! + graph.geometry_counts[e]! + 2;
+    this.lineLon = new Float64Array(this.lineStart[edges]!);
+    this.lineLat = new Float64Array(this.lineStart[edges]!);
+    this.segmentEdge = new Int32Array(this.lineStart[edges]! - edges);
+    for (let e = 0; e < edges; e++) {
+      // Igual que edgeGeometry, pero sin crear arreglos por arista.
+      const a = graph.edges[e * EDGE_STRIDE]!;
+      const b = graph.edges[e * EDGE_STRIDE + 1]!;
+      let q = this.lineStart[e]!;
+      let gx = Math.round(this.lon[a]! * SCALE);
+      let gy = Math.round(this.lat[a]! * SCALE);
+      this.lineLon[q] = this.lon[a]!;
+      this.lineLat[q++] = this.lat[a]!;
+      for (let k = this.edgeGeometryStart[e]!; k < this.edgeGeometryStart[e + 1]!; k++) {
+        gx += graph.geometry[2 * k]!;
+        gy += graph.geometry[2 * k + 1]!;
+        this.lineLon[q] = gx / SCALE;
+        this.lineLat[q++] = gy / SCALE;
+      }
+      this.lineLon[q] = this.lon[b]!;
+      this.lineLat[q] = this.lat[b]!;
+      this.segmentEdge.fill(e, this.lineStart[e]! - e, this.lineStart[e + 1]! - e - 1);
     }
     this.adjacency = {
       foot: this.buildAdjacency(FOOT_FORWARD, FOOT_BACKWARD),
@@ -135,7 +208,7 @@ export class Router {
       reversed[i] = rev ? 1 : 0;
     });
     const main = mainComponent(start, target, hasArc);
-    const grid = new Map<string, number[]>();
+    const grid = new Map<number, number[]>();
     let mainCount = 0;
     let arcCount = 0;
     for (let v = 0; v < count; v++) {
@@ -147,7 +220,43 @@ export class Router {
       if (cell) cell.push(v);
       else grid.set(key, [v]);
     }
-    return { start, target, edge, reversed, grid, network: { main: mainCount, total: arcCount } };
+    return { start, target, edge, reversed, main, grid, network: { main: mainCount, total: arcCount } };
+  }
+
+  /**
+   * Tramos de las aristas de la red principal de un perfil, por cada celda que
+   * toca su caja. Es lo más caro de armar, así que se arma la primera vez que
+   * snap lo pide para ese perfil y no al crear el router.
+   */
+  private segments(profile: Profile): Map<number, number[]> {
+    const cached = this.segmentIndex[profile];
+    if (cached) return cached;
+    const { edges } = this.graph;
+    const { main } = this.adjacency[profile];
+    const [forward, backward] = profile === "foot" ? [FOOT_FORWARD, FOOT_BACKWARD] : [CAR_FORWARD, CAR_BACKWARD];
+    // Solo las aristas con ambos extremos en la red principal: desde un punto
+    // sobre ellas siempre se sale y se llega, sea cual sea su sentido.
+    const segments = new Map<number, number[]>();
+    for (let e = 0; e < edges.length / EDGE_STRIDE; e++) {
+      const flags = edges[e * EDGE_STRIDE + 3]!;
+      if (!(flags & (forward | backward)) || !main[edges[e * EDGE_STRIDE]!] || !main[edges[e * EDGE_STRIDE + 1]!]) continue;
+      for (let p = this.lineStart[e]!; p < this.lineStart[e + 1]! - 1; p++) {
+        const x0 = Math.floor(Math.min(this.lineLon[p]!, this.lineLon[p + 1]!) / CELL_DEG);
+        const x1 = Math.floor(Math.max(this.lineLon[p]!, this.lineLon[p + 1]!) / CELL_DEG);
+        const y0 = Math.floor(Math.min(this.lineLat[p]!, this.lineLat[p + 1]!) / CELL_DEG);
+        const y1 = Math.floor(Math.max(this.lineLat[p]!, this.lineLat[p + 1]!) / CELL_DEG);
+        for (let x = x0; x <= x1; x++) {
+          for (let y = y0; y <= y1; y++) {
+            const key = cellKey(x, y);
+            const cell = segments.get(key);
+            if (cell) cell.push(p - e);
+            else segments.set(key, [p - e]);
+          }
+        }
+      }
+    }
+    this.segmentIndex[profile] = segments;
+    return segments;
   }
 
   /** Vértices de la red principal de un perfil y vértices con algún arco (para verificar el grafo). */
@@ -155,7 +264,15 @@ export class Router {
     return { ...this.adjacency[profile].network };
   }
 
-  /** Vértice más cercano a un punto para un perfil, o -1 si no hay ninguno a menos de MAX_SNAP_M. */
+  /**
+   * Vértice de la red principal más cercano a un punto para un perfil, o -1 si
+   * no hay ninguno a menos de MAX_SNAP_M. route() no lo usa (se ajusta a la
+   * calle con snap); queda para quien necesite un vértice del grafo. Un punto a
+   * mitad de una calle larga puede estar cerca de la calle y lejos de todos sus
+   * vértices: entonces nearest da -1 y route() igual encuentra la ruta.
+   *
+   * @deprecated Usá snap(p, perfil) !== null para saber si un punto está cerca de la red.
+   */
   nearest([lon, lat]: LngLat, profile: Profile): number {
     const { grid } = this.adjacency[profile];
     const cx = Math.floor(lon / CELL_DEG);
@@ -183,40 +300,160 @@ export class Router {
     return best;
   }
 
+  /**
+   * Punto más cercano a `[lon, lat]` sobre una arista de la red principal del
+   * perfil, o null si no hay ninguna a menos de MAX_SNAP_M. Recorre la grilla
+   * por anillos desde la celda del punto, como nearest.
+   */
+  snap([lon, lat]: LngLat, profile: Profile): Snap | null {
+    const segments = this.segments(profile);
+    // Plano local en metros alrededor del punto: a menos de 1 km, la diferencia
+    // con la distancia sobre la esfera es despreciable.
+    const ky = METERS_PER_DEG;
+    const kx = METERS_PER_DEG * Math.cos((lat * Math.PI) / 180);
+    const cx = Math.floor(lon / CELL_DEG);
+    const cy = Math.floor(lat / CELL_DEG);
+    const cellM = CELL_DEG * kx; // el lado más corto de la celda
+    const rings = Math.ceil(MAX_SNAP_M / cellM) + 1;
+    let best = -1;
+    let bestT = 0;
+    let bestM = MAX_SNAP_M;
+    for (let r = 0; r <= rings; r++) {
+      // Un anillo más lejos que lo mejor encontrado ya no puede mejorarlo.
+      if (best >= 0 && (r - 1) * cellM > bestM) break;
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dy = -r; dy <= r; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          for (const s of segments.get(cellKey(cx + dx, cy + dy)) ?? []) {
+            const p = s + this.segmentEdge[s]!;
+            const ax = (this.lineLon[p]! - lon) * kx;
+            const ay = (this.lineLat[p]! - lat) * ky;
+            const ux = (this.lineLon[p + 1]! - lon) * kx - ax;
+            const uy = (this.lineLat[p + 1]! - lat) * ky - ay;
+            const len2 = ux * ux + uy * uy;
+            const t = len2 > 0 ? Math.min(1, Math.max(0, -(ax * ux + ay * uy) / len2)) : 0;
+            const d = Math.hypot(ax + t * ux, ay + t * uy);
+            if (d < bestM || (best < 0 && d === bestM)) {
+              bestM = d;
+              best = s;
+              bestT = t;
+            }
+          }
+        }
+      }
+    }
+    if (best < 0) return null;
+    const edge = this.segmentEdge[best]!;
+    const p = best + edge;
+    const first = this.lineStart[edge]!;
+    const last = this.lineStart[edge + 1]! - 1;
+    const point: LngLat =
+      bestT === 0
+        ? [this.lineLon[p]!, this.lineLat[p]!]
+        : bestT === 1
+          ? [this.lineLon[p + 1]!, this.lineLat[p + 1]!]
+          : [
+              this.lineLon[p]! + bestT * (this.lineLon[p + 1]! - this.lineLon[p]!),
+              this.lineLat[p]! + bestT * (this.lineLat[p + 1]! - this.lineLat[p]!),
+            ];
+    // Qué parte del largo de la arista queda antes del punto.
+    let along = 0;
+    let total = 0;
+    for (let q = first; q < last; q++) {
+      const m = distanceM(this.lineLon[q]!, this.lineLat[q]!, this.lineLon[q + 1]!, this.lineLat[q + 1]!);
+      if (q < p) along += m;
+      else if (q === p) along += bestT * m;
+      total += m;
+    }
+    // Casi encima de un extremo cuenta como el vértice: así un punto en un cruce
+    // (o corrido unos centímetros por el redondeo de las coordenadas) no queda
+    // sobre una vía de sentido único que le prohíbe volver al cruce.
+    if (along <= VERTEX_TOLERANCE_M || total - along <= VERTEX_TOLERANCE_M) {
+      const atEnd = total - along < along;
+      const q = atEnd ? last : first;
+      const vertex: LngLat = [this.lineLon[q]!, this.lineLat[q]!];
+      return { edge, segment: atEnd ? last - first - 1 : 0, fraction: atEnd ? 1 : 0, point: vertex, distance: distanceM(lon, lat, ...vertex) };
+    }
+    const fraction = Math.min(1, along / total);
+    return { edge, segment: p - first, fraction, point, distance: distanceM(lon, lat, point[0], point[1]) };
+  }
+
   /** Ruta más rápida entre dos puntos, o null si alguno no está cerca de una vía o no hay conexión. */
   route(from: LngLat, to: LngLat, profile: Profile): Route | null {
-    const source = this.nearest(from, profile);
-    const target = this.nearest(to, profile);
-    if (source < 0 || target < 0) return null;
-    const snap = {
-      from: distanceM(from[0], from[1], this.lon[source]!, this.lat[source]!),
-      to: distanceM(to[0], to[1], this.lon[target]!, this.lat[target]!),
-    };
-    const { start, target: arcTarget, edge: arcEdge, reversed } = this.adjacency[profile];
+    const source = this.snap(from, profile);
+    const target = this.snap(to, profile);
+    if (!source || !target) return null;
+    const { start, target: arcTarget, edge: arcEdge } = this.adjacency[profile];
     const { edges } = this.graph;
+    const [forward, backward] = profile === "foot" ? [FOOT_FORWARD, FOOT_BACKWARD] : [CAR_FORWARD, CAR_BACKWARD];
     const maxSpeed = profile === "foot" ? FOOT_KMH / 3.6 : Math.max(...CLASSES.map((c) => c.carKmh ?? 0)) / 3.6;
     const speed = (cls: number): number => (profile === "foot" ? FOOT_KMH : CLASSES[cls]!.carKmh!) / 3.6;
+    const lengthM = (e: number): number => edges[e * EDGE_STRIDE + 2]! / 10;
+    const seconds = (e: number, meters: number): number => meters / speed(edges[e * EDGE_STRIDE + 4]!);
+    const goes = (e: number, flag: number): boolean => (edges[e * EDGE_STRIDE + 3]! & flag) !== 0;
+
+    // Tramos parciales en las aristas del origen y del destino, en metros
+    // (Infinity si el sentido no lo permite). Desde el punto ajustado se va hacia
+    // el vértice `desde` (a) contra el dibujo de la arista y hacia `hasta` (b) a
+    // favor; si el punto es el propio vértice, el tramo mide cero en cualquier
+    // sentido.
+    const sa = edges[source.edge * EDGE_STRIDE]!;
+    const sb = edges[source.edge * EDGE_STRIDE + 1]!;
+    const ta = edges[target.edge * EDGE_STRIDE]!;
+    const tb = edges[target.edge * EDGE_STRIDE + 1]!;
+    const sL = lengthM(source.edge);
+    const tL = lengthM(target.edge);
+    const leaveToA = goes(source.edge, backward) || source.fraction === 0 ? source.fraction * sL : Infinity;
+    const leaveToB = goes(source.edge, forward) || source.fraction === 1 ? (1 - source.fraction) * sL : Infinity;
+    const arriveFromA = goes(target.edge, forward) || target.fraction === 0 ? target.fraction * tL : Infinity;
+    const arriveFromB = goes(target.edge, backward) || target.fraction === 1 ? (1 - target.fraction) * tL : Infinity;
+
+    // Misma arista: el tramo directo, si el sentido lo permite.
+    let bestTime = Infinity;
+    let bestEnd = -1; // vértice por el que se entra a la arista del destino; -1, tramo directo
+    let bestFromA = false;
+    if (source.edge === target.edge) {
+      const delta = target.fraction - source.fraction;
+      if (delta === 0 || (delta > 0 && goes(source.edge, forward)) || (delta < 0 && goes(source.edge, backward))) {
+        bestTime = seconds(source.edge, Math.abs(delta) * sL);
+      }
+    }
 
     const count = this.lon.length;
     const time = new Float64Array(count).fill(Infinity);
-    const via = new Int32Array(count).fill(-1); // arco por el que se llegó
+    const via = new Int32Array(count).fill(-1); // arco por el que se llegó; -1 en los vértices de salida
     const done = new Uint8Array(count);
-    const heuristic = (v: number): number =>
-      distanceM(this.lon[v]!, this.lat[v]!, this.lon[target]!, this.lat[target]!) / maxSpeed;
+    const [px, py] = target.point;
+    const heuristic = (v: number): number => distanceM(this.lon[v]!, this.lat[v]!, px, py) / maxSpeed;
     const heap = new MinHeap();
-    time[source] = 0;
-    heap.push(source, heuristic(source));
+    for (const [v, meters] of [[sa, leaveToA], [sb, leaveToB]] as const) {
+      const t = seconds(source.edge, meters);
+      if (t < time[v]!) {
+        time[v] = t;
+        heap.push(v, t + heuristic(v));
+      }
+    }
 
-    while (heap.size > 0) {
+    // A*: la heurística tampoco sobreestima el tramo final, así que cuando la
+    // menor prioridad pendiente alcanza el mejor tiempo conocido ya no se mejora.
+    while (heap.size > 0 && heap.minPriority < bestTime) {
       const v = heap.pop();
       if (done[v]) continue;
       done[v] = 1;
-      if (v === target) break;
+      for (const [end, meters, fromA] of [[ta, arriveFromA, true], [tb, arriveFromB, false]] as const) {
+        if (v !== end || meters === Infinity) continue;
+        const t = time[v]! + seconds(target.edge, meters);
+        if (t < bestTime) {
+          bestTime = t;
+          bestEnd = v;
+          bestFromA = fromA;
+        }
+      }
       for (let i = start[v]!; i < start[v + 1]!; i++) {
         const w = arcTarget[i]!;
         if (done[w]) continue;
         const e = arcEdge[i]!;
-        const t = time[v]! + edges[e * EDGE_STRIDE + 2]! / 10 / speed(edges[e * EDGE_STRIDE + 4]!);
+        const t = time[v]! + seconds(e, lengthM(e));
         if (t < time[w]!) {
           time[w] = t;
           via[w] = i;
@@ -224,27 +461,83 @@ export class Router {
         }
       }
     }
-    if (!done[target]) return null;
+    if (bestTime === Infinity) return null;
+
+    const { distance, coordinates } = this.line(profile, source, target, bestEnd, bestFromA, via, { leaveToA, leaveToB, arriveFromA, arriveFromB });
+    return { distance, duration: bestTime, coordinates, snap: { from: source.distance, to: target.distance } };
+  }
+
+  /**
+   * Línea para dibujar y largo, en metros, de la ruta que encontró route(): del
+   * punto ajustado de salida al de llegada. `end` es el vértice por el que se
+   * entra a la arista del destino (-1, el tramo directo por la misma arista),
+   * `fromA` dice si es su vértice `desde` y `via` es el arco por el que se llegó
+   * a cada vértice (-1 en los de salida).
+   */
+  private line(
+    profile: Profile,
+    source: Snap,
+    target: Snap,
+    end: number,
+    fromA: boolean,
+    via: Int32Array,
+    { leaveToA, leaveToB, arriveFromA, arriveFromB }: PartialLegs,
+  ): { distance: number; coordinates: LngLat[] } {
+    const { target: arcTarget, edge: arcEdge, reversed } = this.adjacency[profile];
+    const { edges } = this.graph;
+    const lengthM = (e: number): number => edges[e * EDGE_STRIDE + 2]! / 10;
+    const sa = edges[source.edge * EDGE_STRIDE]!;
+    const sb = edges[source.edge * EDGE_STRIDE + 1]!;
+    const coordinates: LngLat[] = [];
+    const add = (point: LngLat): void => {
+      const prev = coordinates.at(-1);
+      if (!prev || prev[0] !== point[0] || prev[1] !== point[1]) coordinates.push(point);
+    };
+    const linePoint = (q: number): LngLat => [this.lineLon[q]!, this.lineLat[q]!];
+    // Primer punto del tramo en que cae cada punto ajustado.
+    const sp = this.lineStart[source.edge]! + source.segment;
+    const tp = this.lineStart[target.edge]! + target.segment;
+    add(source.point);
+
+    if (end < 0) {
+      if (target.fraction >= source.fraction) for (let q = sp + 1; q <= tp; q++) add(linePoint(q));
+      else for (let q = sp; q > tp; q--) add(linePoint(q));
+      add(target.point);
+      return { distance: Math.abs(target.fraction - source.fraction) * lengthM(source.edge), coordinates };
+    }
 
     // Se reconstruye del destino al origen y se da vuelta al final.
     const arcs: number[] = [];
-    for (let v = target; v !== source; ) {
+    let v = end;
+    while (via[v]! >= 0) {
       const i = via[v]!;
       arcs.push(i);
       const e = arcEdge[i]!;
       v = reversed[i] ? edges[e * EDGE_STRIDE + 1]! : edges[e * EDGE_STRIDE]!;
     }
     arcs.reverse();
-    const coordinates: LngLat[] = [[this.lon[source]!, this.lat[source]!]];
-    let distance = 0;
+    // v es el vértice por el que se salió de la arista del origen.
+    const leftToA = v === sa && (sa !== sb || leaveToA <= leaveToB);
+    let distance = leftToA ? leaveToA : leaveToB;
+    if (leftToA) for (let q = sp; q >= this.lineStart[source.edge]!; q--) add(linePoint(q));
+    else for (let q = sp + 1; q < this.lineStart[source.edge + 1]!; q++) add(linePoint(q));
     for (const i of arcs) {
       const e = arcEdge[i]!;
-      distance += edges[e * EDGE_STRIDE + 2]! / 10;
+      distance += lengthM(e);
       const inner = this.edgeGeometry(e);
       if (reversed[i]) inner.reverse();
-      coordinates.push(...inner, [this.lon[arcTarget[i]!]!, this.lat[arcTarget[i]!]!]);
+      for (const point of inner) add(point);
+      add(this.vertex(arcTarget[i]!));
     }
-    return { distance, duration: time[target]!, coordinates, snap };
+    distance += fromA ? arriveFromA : arriveFromB;
+    if (fromA) for (let q = this.lineStart[target.edge]!; q <= tp; q++) add(linePoint(q));
+    else for (let q = this.lineStart[target.edge + 1]! - 1; q > tp; q--) add(linePoint(q));
+    add(target.point);
+    return { distance, coordinates };
+  }
+
+  private vertex(v: number): LngLat {
+    return [this.lon[v]!, this.lat[v]!];
   }
 
   /** Puntos intermedios de una arista, en el sentido en que se guardó. */
@@ -333,8 +626,13 @@ function mainComponent(start: Int32Array, target: Int32Array, hasArc: Uint8Array
   return main;
 }
 
-function cellKey(x: number, y: number): string {
-  return `${x}:${y}`;
+/**
+ * Clave numérica de una celda de la grilla (en un Map, más rápida que un texto).
+ * No se repite mientras |y| < 2¹⁹, y con celdas de CELL_DEG ninguna latitud pasa
+ * de 18 000.
+ */
+function cellKey(x: number, y: number): number {
+  return x * 0x100000 + y;
 }
 
 /** Montículo binario de mínimos: (vértice, prioridad). */
@@ -344,6 +642,11 @@ class MinHeap {
 
   get size(): number {
     return this.items.length;
+  }
+
+  /** Prioridad del primero en salir (con el montículo no vacío). */
+  get minPriority(): number {
+    return this.priorities[0]!;
   }
 
   push(item: number, priority: number): void {

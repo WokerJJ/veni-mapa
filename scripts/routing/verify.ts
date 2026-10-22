@@ -69,7 +69,7 @@ export function checkGraph(
       total > 0 && main / total >= MIN_CONNECTED,
       `rutas (${profile}): la red principal tiene ${main} de ${total} vértices (mínimo ${MIN_CONNECTED * 100} %)`,
     );
-    check(router.nearest(options.center, profile) >= 0, `rutas (${profile}): el centro de la región está cerca de la red principal`);
+    check(router.snap(options.center, profile) !== null, `rutas (${profile}): el centro de la región está cerca de la red principal`);
   }
   return checks;
 }

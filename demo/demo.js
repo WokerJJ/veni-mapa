@@ -360,7 +360,7 @@ async function calcularRuta() {
       estadoNuevo = "ruta";
     } else {
       // El router no dice cuál de los dos puntos quedó lejos de la red.
-      estadoNuevo = r.nearest(posicion, perfil) < 0 ? "posicion-lejos" : "sin-ruta";
+      estadoNuevo = r.snap(posicion, perfil) === null ? "posicion-lejos" : "sin-ruta";
     }
   } catch (error) {
     console.warn(error);
