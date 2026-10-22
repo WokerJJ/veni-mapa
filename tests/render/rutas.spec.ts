@@ -16,8 +16,9 @@ const VIA_PANORAMA: LngLat = [-76.1452394, 4.3981409];
 // Dos nodos de la way 110131603, calle de sentido único hacia el oeste.
 const ONEWAY_ESTE: LngLat = [-76.1528384, 4.4128313];
 const ONEWAY_OESTE: LngLat = [-76.1543889, 4.4127813];
-// En las montañas del oeste, a más de 1 km de cualquier vía.
-const MONTANA: LngLat = [-76.29, 4.4];
+// En las montañas del oeste, a más de 1 km de cualquier punto de una vía
+// (no solo de un cruce: el router se ajusta a la calle, #75).
+const MONTANA: LngLat = [-76.25, 4.435];
 const BOGOTA: LngLat = [-74.0721, 4.711];
 
 const FOOT_MS = 4.5 / 3.6;
