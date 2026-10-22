@@ -122,6 +122,12 @@ export class Router {
   private readonly adjacency: Record<Profile, Adjacency>;
   /** Índice de tramos de cada perfil (ver segments), armado la primera vez que se usa. */
   private readonly segmentIndex: Partial<Record<Profile, Map<number, number[]>>> = {};
+  /**
+   * Caja de la red agrandada en MAX_SNAP_M: [oeste, sur, este, norte]. Fuera
+   * de ella no hay calle a menos de MAX_SNAP_M, y snap no recorre la grilla
+   * (cerca de un polo, la cantidad de anillos crecería sin límite).
+   */
+  private readonly reach: [number, number, number, number];
 
   constructor(graph: RoutingGraph) {
     if (graph.format !== FORMAT || graph.version !== VERSION) {
@@ -168,6 +174,22 @@ export class Router {
       this.lineLat[q] = this.lat[b]!;
       this.segmentEdge.fill(e, this.lineStart[e]! - e, this.lineStart[e + 1]! - e - 1);
     }
+    let west = Infinity;
+    let south = Infinity;
+    let east = -Infinity;
+    let north = -Infinity;
+    for (let q = 0; q < this.lineLon.length; q++) {
+      west = Math.min(west, this.lineLon[q]!);
+      east = Math.max(east, this.lineLon[q]!);
+      south = Math.min(south, this.lineLat[q]!);
+      north = Math.max(north, this.lineLat[q]!);
+    }
+    const marginLat = MAX_SNAP_M / METERS_PER_DEG;
+    // El margen en longitud se mide en la latitud de la caja más lejana del
+    // ecuador, donde un grado de longitud es más corto.
+    const farLat = Math.min(90, Math.max(Math.abs(south), Math.abs(north)) + marginLat);
+    const marginLon = MAX_SNAP_M / (METERS_PER_DEG * Math.max(Math.cos((farLat * Math.PI) / 180), 1e-6));
+    this.reach = [west - marginLon, south - marginLat, east + marginLon, north + marginLat];
     this.adjacency = {
       foot: this.buildAdjacency(FOOT_FORWARD, FOOT_BACKWARD),
       car: this.buildAdjacency(CAR_FORWARD, CAR_BACKWARD),
@@ -306,6 +328,8 @@ export class Router {
    * por anillos desde la celda del punto, como nearest.
    */
   snap([lon, lat]: LngLat, profile: Profile): Snap | null {
+    const [west, south, east, north] = this.reach;
+    if (!(lon >= west && lon <= east && lat >= south && lat <= north)) return null;
     const segments = this.segments(profile);
     // Plano local en metros alrededor del punto: a menos de 1 km, la diferencia
     // con la distancia sobre la esfera es despreciable.
