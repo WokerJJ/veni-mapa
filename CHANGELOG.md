@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.2](https://github.com/WokerJJ/veni-mapa/compare/v0.2.1...v0.2.2) (2026-10-22)
+
+
+### Correcciones
+
+* **rutas:** ajustar origen y destino a la calle más cercana, no al vértice ([#76](https://github.com/WokerJJ/veni-mapa/issues/76)) ([f26d958](https://github.com/WokerJJ/veni-mapa/commit/f26d958f7691f76bd4a81fdf9fc78be5ef7e3cbe)), closes [#75](https://github.com/WokerJJ/veni-mapa/issues/75)
+
+
+### Documentación
+
+* bitácora del bloque 7 ([#68](https://github.com/WokerJJ/veni-mapa/issues/68)) ([11c9711](https://github.com/WokerJJ/veni-mapa/commit/11c97113d8c613cb8563fac13273f15849b2b3ca))
+
 ## [0.2.1](https://github.com/WokerJJ/veni-mapa/compare/v0.2.0...v0.2.1) (2026-10-08)
 
 
