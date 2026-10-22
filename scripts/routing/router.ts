@@ -56,11 +56,15 @@ export interface Route {
   snap: { from: number; to: number };
 }
 
-/** Punto de la red principal más cercano a un punto pedido, sobre una arista. */
+/**
+ * Punto de la red principal más cercano a un punto pedido, sobre una arista.
+ * `edge` y `segment` son índices internos del grafo: cambian de una publicación
+ * del grafo a otra, así que no se guardan ni se comparan entre grafos.
+ */
 export interface Snap {
-  /** Arista en la que cae. */
+  /** Arista en la que cae (índice interno, inestable entre publicaciones del grafo). */
   edge: number;
-  /** Tramo de la arista: entre su punto k y el k + 1, contando los vértices. */
+  /** Tramo de la arista: entre su punto k y el k + 1, contando los vértices (índice interno, inestable entre publicaciones del grafo). */
   segment: number;
   /** Parte del largo de la arista desde su vértice `desde`, de 0 a 1. */
   fraction: number;
@@ -84,12 +88,20 @@ interface Adjacency {
   target: Int32Array;
   edge: Int32Array;
   reversed: Uint8Array;
+  /** 1 en cada vértice de la red principal. */
+  main: Uint8Array;
   /** Vértices de la red principal, por celda de la grilla. */
-  grid: Map<string, number[]>;
-  /** Tramos de las aristas de la red principal, por cada celda que toca su caja. */
-  segments: Map<string, number[]>;
+  grid: Map<number, number[]>;
   /** Tamaño de la red principal y cantidad de vértices con algún arco. */
   network: { main: number; total: number };
+}
+
+/** Tramos parciales de route() en las aristas del origen y del destino, en metros (Infinity si el sentido no lo permite). */
+interface PartialLegs {
+  leaveToA: number;
+  leaveToB: number;
+  arriveFromA: number;
+  arriveFromB: number;
 }
 
 export class Router {
@@ -108,6 +120,8 @@ export class Router {
   /** Arista de cada tramo. */
   private readonly segmentEdge: Int32Array;
   private readonly adjacency: Record<Profile, Adjacency>;
+  /** Índice de tramos de cada perfil (ver segments), armado la primera vez que se usa. */
+  private readonly segmentIndex: Partial<Record<Profile, Map<number, number[]>>> = {};
 
   constructor(graph: RoutingGraph) {
     if (graph.format !== FORMAT || graph.version !== VERSION) {
@@ -194,7 +208,7 @@ export class Router {
       reversed[i] = rev ? 1 : 0;
     });
     const main = mainComponent(start, target, hasArc);
-    const grid = new Map<string, number[]>();
+    const grid = new Map<number, number[]>();
     let mainCount = 0;
     let arcCount = 0;
     for (let v = 0; v < count; v++) {
@@ -206,9 +220,23 @@ export class Router {
       if (cell) cell.push(v);
       else grid.set(key, [v]);
     }
+    return { start, target, edge, reversed, main, grid, network: { main: mainCount, total: arcCount } };
+  }
+
+  /**
+   * Tramos de las aristas de la red principal de un perfil, por cada celda que
+   * toca su caja. Es lo más caro de armar, así que se arma la primera vez que
+   * snap lo pide para ese perfil y no al crear el router.
+   */
+  private segments(profile: Profile): Map<number, number[]> {
+    const cached = this.segmentIndex[profile];
+    if (cached) return cached;
+    const { edges } = this.graph;
+    const { main } = this.adjacency[profile];
+    const [forward, backward] = profile === "foot" ? [FOOT_FORWARD, FOOT_BACKWARD] : [CAR_FORWARD, CAR_BACKWARD];
     // Solo las aristas con ambos extremos en la red principal: desde un punto
     // sobre ellas siempre se sale y se llega, sea cual sea su sentido.
-    const segments = new Map<string, number[]>();
+    const segments = new Map<number, number[]>();
     for (let e = 0; e < edges.length / EDGE_STRIDE; e++) {
       const flags = edges[e * EDGE_STRIDE + 3]!;
       if (!(flags & (forward | backward)) || !main[edges[e * EDGE_STRIDE]!] || !main[edges[e * EDGE_STRIDE + 1]!]) continue;
@@ -227,7 +255,8 @@ export class Router {
         }
       }
     }
-    return { start, target, edge, reversed, grid, segments, network: { main: mainCount, total: arcCount } };
+    this.segmentIndex[profile] = segments;
+    return segments;
   }
 
   /** Vértices de la red principal de un perfil y vértices con algún arco (para verificar el grafo). */
@@ -238,7 +267,11 @@ export class Router {
   /**
    * Vértice de la red principal más cercano a un punto para un perfil, o -1 si
    * no hay ninguno a menos de MAX_SNAP_M. route() no lo usa (se ajusta a la
-   * calle con snap); queda para quien necesite un vértice del grafo.
+   * calle con snap); queda para quien necesite un vértice del grafo. Un punto a
+   * mitad de una calle larga puede estar cerca de la calle y lejos de todos sus
+   * vértices: entonces nearest da -1 y route() igual encuentra la ruta.
+   *
+   * @deprecated Usá snap(p, perfil) !== null para saber si un punto está cerca de la red.
    */
   nearest([lon, lat]: LngLat, profile: Profile): number {
     const { grid } = this.adjacency[profile];
@@ -273,7 +306,7 @@ export class Router {
    * por anillos desde la celda del punto, como nearest.
    */
   snap([lon, lat]: LngLat, profile: Profile): Snap | null {
-    const { segments } = this.adjacency[profile];
+    const segments = this.segments(profile);
     // Plano local en metros alrededor del punto: a menos de 1 km, la diferencia
     // con la distancia sobre la esfera es despreciable.
     const ky = METERS_PER_DEG;
@@ -350,7 +383,7 @@ export class Router {
     const source = this.snap(from, profile);
     const target = this.snap(to, profile);
     if (!source || !target) return null;
-    const { start, target: arcTarget, edge: arcEdge, reversed } = this.adjacency[profile];
+    const { start, target: arcTarget, edge: arcEdge } = this.adjacency[profile];
     const { edges } = this.graph;
     const [forward, backward] = profile === "foot" ? [FOOT_FORWARD, FOOT_BACKWARD] : [CAR_FORWARD, CAR_BACKWARD];
     const maxSpeed = profile === "foot" ? FOOT_KMH / 3.6 : Math.max(...CLASSES.map((c) => c.carKmh ?? 0)) / 3.6;
@@ -430,7 +463,31 @@ export class Router {
     }
     if (bestTime === Infinity) return null;
 
-    const snap = { from: source.distance, to: target.distance };
+    const { distance, coordinates } = this.line(profile, source, target, bestEnd, bestFromA, via, { leaveToA, leaveToB, arriveFromA, arriveFromB });
+    return { distance, duration: bestTime, coordinates, snap: { from: source.distance, to: target.distance } };
+  }
+
+  /**
+   * Línea para dibujar y largo, en metros, de la ruta que encontró route(): del
+   * punto ajustado de salida al de llegada. `end` es el vértice por el que se
+   * entra a la arista del destino (-1, el tramo directo por la misma arista),
+   * `fromA` dice si es su vértice `desde` y `via` es el arco por el que se llegó
+   * a cada vértice (-1 en los de salida).
+   */
+  private line(
+    profile: Profile,
+    source: Snap,
+    target: Snap,
+    end: number,
+    fromA: boolean,
+    via: Int32Array,
+    { leaveToA, leaveToB, arriveFromA, arriveFromB }: PartialLegs,
+  ): { distance: number; coordinates: LngLat[] } {
+    const { target: arcTarget, edge: arcEdge, reversed } = this.adjacency[profile];
+    const { edges } = this.graph;
+    const lengthM = (e: number): number => edges[e * EDGE_STRIDE + 2]! / 10;
+    const sa = edges[source.edge * EDGE_STRIDE]!;
+    const sb = edges[source.edge * EDGE_STRIDE + 1]!;
     const coordinates: LngLat[] = [];
     const add = (point: LngLat): void => {
       const prev = coordinates.at(-1);
@@ -442,16 +499,16 @@ export class Router {
     const tp = this.lineStart[target.edge]! + target.segment;
     add(source.point);
 
-    if (bestEnd < 0) {
+    if (end < 0) {
       if (target.fraction >= source.fraction) for (let q = sp + 1; q <= tp; q++) add(linePoint(q));
       else for (let q = sp; q > tp; q--) add(linePoint(q));
       add(target.point);
-      return { distance: Math.abs(target.fraction - source.fraction) * sL, duration: bestTime, coordinates, snap };
+      return { distance: Math.abs(target.fraction - source.fraction) * lengthM(source.edge), coordinates };
     }
 
     // Se reconstruye del destino al origen y se da vuelta al final.
     const arcs: number[] = [];
-    let v = bestEnd;
+    let v = end;
     while (via[v]! >= 0) {
       const i = via[v]!;
       arcs.push(i);
@@ -472,11 +529,11 @@ export class Router {
       for (const point of inner) add(point);
       add(this.vertex(arcTarget[i]!));
     }
-    distance += bestFromA ? arriveFromA : arriveFromB;
-    if (bestFromA) for (let q = this.lineStart[target.edge]!; q <= tp; q++) add(linePoint(q));
+    distance += fromA ? arriveFromA : arriveFromB;
+    if (fromA) for (let q = this.lineStart[target.edge]!; q <= tp; q++) add(linePoint(q));
     else for (let q = this.lineStart[target.edge + 1]! - 1; q > tp; q--) add(linePoint(q));
     add(target.point);
-    return { distance, duration: bestTime, coordinates, snap };
+    return { distance, coordinates };
   }
 
   private vertex(v: number): LngLat {
@@ -569,8 +626,13 @@ function mainComponent(start: Int32Array, target: Int32Array, hasArc: Uint8Array
   return main;
 }
 
-function cellKey(x: number, y: number): string {
-  return `${x}:${y}`;
+/**
+ * Clave numérica de una celda de la grilla (en un Map, más rápida que un texto).
+ * No se repite mientras |y| < 2¹⁹, y con celdas de CELL_DEG ninguna latitud pasa
+ * de 18 000.
+ */
+function cellKey(x: number, y: number): number {
+  return x * 0x100000 + y;
 }
 
 /** Montículo binario de mínimos: (vértice, prioridad). */
