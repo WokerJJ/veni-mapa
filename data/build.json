@@ -1,8 +1,8 @@
 {
   "region": "roldanillo",
-  "protomaps_build": "20260929",
-  "bytes": 1652451,
-  "sha256": "2d3e238271a9d0ccdd44953905a97e09551cf05b46aee4dc50e1caf5c76d5dfc",
+  "protomaps_build": "20261103",
+  "bytes": 1763731,
+  "sha256": "0ec7dd15b815de2d442a01dd96c1299d27c75550193fd40cd3a388754a7c350a",
   "tiles": 961,
   "tiles_by_zoom": {
     "0": 1,
